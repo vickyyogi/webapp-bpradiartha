@@ -1,0 +1,348 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-poppins), sans-serif;
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-fraunces), Georgia, serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-primary-dark: var(--primary-dark);
+  --color-primary-light: var(--primary-light);
+  --color-primary-soft: var(--primary-soft);
+  --color-gold: var(--gold);
+  --color-gold-dark: var(--gold-dark);
+  --color-gold-light: var(--gold-light);
+  --color-gold-soft: var(--gold-soft);
+  --color-yellow: var(--yellow);
+  --color-yellow-soft: var(--yellow-soft);
+  --color-surface: var(--surface);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --animate-fade-in-up: fadeInUp 0.6s ease-out forwards;
+  --animate-pulse-subtle: pulseSubtle 3s ease-in-out infinite;
+}
+
+:root {
+  /* Primary Red */
+  --primary: #B91C1C;
+  --primary-dark: #991B1B;
+  --primary-light: #DC2626;
+  --primary-soft: #FEF2F2;
+  --primary-foreground: #FFFFFF;
+
+  /* Gold - Premium Accent */
+  --gold: #D4AF37;
+  --gold-dark: #A16207;
+  --gold-light: #EABF45;
+  --gold-soft: #FEF9C3;
+
+  /* Yellow - Secondary Accent / Warning */
+  --yellow: #FACC15;
+  --yellow-soft: #FEFCE8;
+
+  /* Neutral Background & Surface */
+  --background: #f8f9fa;
+  --foreground: #1F2937;
+  --surface: #FFFFFF;
+  --card: #FFFFFF;
+  --card-foreground: #1F2937;
+  --popover: #FFFFFF;
+  --popover-foreground: #1F2937;
+
+  /* Secondary & Muted */
+  --secondary: #FEF2F2;
+  --secondary-foreground: #B91C1C;
+  --muted: #F3F4F6;
+  --muted-foreground: #6B7280;
+
+  /* Accent - Gold Soft */
+  --accent: #FEF9C3;
+  --accent-foreground: #A16207;
+
+  /* Destructive - Red */
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+
+  /* Borders & Inputs */
+  --border: #E5E7EB;
+  --input: #E5E7EB;
+  --ring: #B91C1C;
+
+  /* Charts */
+  --chart-1: #B91C1C;
+  --chart-2: #D4AF37;
+  --chart-3: #FACC15;
+  --chart-4: #4B5563;
+  --chart-5: #9CA3AF;
+
+  --radius: 0.625rem;
+
+  /* Sidebar */
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #1F2937;
+  --sidebar-primary: #B91C1C;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #FEF2F2;
+  --sidebar-accent-foreground: #B91C1C;
+  --sidebar-border: #E5E7EB;
+  --sidebar-ring: #B91C1C;
+}
+
+.dark {
+  /* Primary Red (Dibuat sedikit lebih terang agar kontras di latar gelap) */
+  --primary: #EF4444;
+  --primary-dark: #DC2626;
+  --primary-light: #F87171;
+  --primary-soft: rgba(239, 68, 68, 0.15);
+  --primary-foreground: #FFFFFF;
+
+  /* Gold - Premium Accent */
+  --gold: #EAB308;
+  --gold-dark: #CA8A04;
+  --gold-light: #FDE047;
+  --gold-soft: rgba(234, 179, 8, 0.15);
+
+  /* Yellow - Secondary Accent / Warning */
+  --yellow: #FACC15;
+  --yellow-soft: rgba(250, 204, 21, 0.15);
+
+  /* Neutral Background & Surface */
+  --background: #0F172A; /* Slate gelap pekat */
+  --foreground: #F8FAFC; /* Teks utama terang */
+  --surface: #1E293B;    /* Latar elemen elevasi 1 */
+  --card: #1E293B;
+  --card-foreground: #F8FAFC;
+  --popover: #1E293B;
+  --popover-foreground: #F8FAFC;
+
+  /* Secondary & Muted */
+  --secondary: #1E293B;
+  --secondary-foreground: #F87171;
+  --muted: #334155;
+  --muted-foreground: #94A3B8;
+
+  /* Accent - Gold Soft */
+  --accent: rgba(234, 179, 8, 0.15);
+  --accent-foreground: #FDE047;
+
+  /* Destructive - Red */
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+
+  /* Borders & Inputs */
+  --border: #334155;
+  --input: #334155;
+  --ring: #EF4444;
+
+  /* Charts (Warna disesuaikan agar kontras pada canvas gelap) */
+  --chart-1: #EF4444;
+  --chart-2: #EAB308;
+  --chart-3: #FACC15;
+  --chart-4: #94A3B8;
+  --chart-5: #64748B;
+
+  --radius: 0.625rem;
+
+  /* Sidebar */
+  --sidebar: #0B1120;
+  --sidebar-foreground: #F8FAFC;
+  --sidebar-primary: #EF4444;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: rgba(239, 68, 68, 0.12);
+  --sidebar-accent-foreground: #F87171;
+  --sidebar-border: #1E293B;
+  --sidebar-ring: #EF4444;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  h1, h2, h3 {
+    @apply font-heading;
+    letter-spacing: -0.015em;
+  }
+}
+
+/* Deep crimson body-scrim used behind section headings — the brand's
+   dominant dark red, kept in one place so accents stay sharp. */
+.brand-heading-accent {
+  background: linear-gradient(
+    100deg,
+    var(--primary-dark) 0%,
+    var(--primary) 45%,
+    var(--gold-dark) 110%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Micro-animations for landing page */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseSubtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+/* Mobile-native baseline */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Controls are controls, not content: no long-press text selection or callout */
+button, a, [role="button"], .tappable {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+button, a, [role="button"] {
+  touch-action: manipulation;
+}
+button:active {
+  transform: scale(0.97);
+  transition: transform 100ms ease-out;
+}
+
+/* iOS zooms any focused field under 16px — keep inputs readable on touch */
+@media (pointer: coarse) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* Safe-area padding for fixed/sticky chrome (viewport-fit=cover is set) */
+.safe-top { padding-top: env(safe-area-inset-top, 0px); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Motion tokens */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Success state entrance (loan application confirmation) — no JS needed,
+   falls back to the current instant swap on browsers without @starting-style */
+.success-enter {
+  transition:
+    opacity 300ms var(--ease-out),
+    transform 300ms var(--ease-out);
+}
+.success-enter {
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+.success-icon {
+  transition: opacity 300ms var(--ease-out) 60ms;
+}
+.success-icon {
+  @starting-style {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .success-enter {
+    @starting-style {
+      opacity: 0;
+      transform: none;
+    }
+  }
+  .success-icon {
+    transition-delay: 0ms;
+  }
+}
+
+/* Mobile drawer entrance */
+.drawer-enter {
+  transition:
+    opacity 200ms var(--ease-drawer),
+    transform 200ms var(--ease-drawer);
+}
+.drawer-enter {
+  @starting-style {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer-enter {
+    @starting-style {
+      opacity: 0;
+      transform: none;
+    }
+  }
+}
+
+/* Grid stagger — cards enter one-by-one once the section scrolls into view.
+   Falls back to instant visibility without @starting-style-era support; the
+   section-level fade below still bridges the pop. */
+.stagger-item {
+  opacity: 0;
+}
+.section-in .stagger-item {
+  animation: fadeInUp 0.6s var(--ease-out) forwards;
+  animation-delay: calc(min(var(--i, 0), 7) * 60ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .stagger-item {
+    opacity: 1;
+    animation: none;
+  }
+}

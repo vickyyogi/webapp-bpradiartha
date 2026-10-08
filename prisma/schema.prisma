@@ -1,0 +1,1065 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique @db.VarChar(50)
+  name      String   @db.VarChar(200)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  branches             Branch[]
+  departments          Department[]
+  users                User[]
+  leads                Lead[] // added for Lead relation
+  creditApplications   CreditApplication[]
+  creditApprovalLimits CreditApprovalLimit[]
+  fieldTasks           FieldTask[]
+  documents            Document[]
+  inventoryItems       InventoryItem[]
+  assets               Asset[]
+  vendors              Vendor[]
+  purchaseRequests     PurchaseRequest[]
+  purchaseOrders       PurchaseOrder[]
+  goodsReceipts        GoodsReceipt[]
+  workflows            Workflow[]
+  auditLogs            AuditLog[]
+  notifications        Notification[]
+  cmsBanners           CmsBanner[]
+  cmsPosts             CmsPost[]
+  cmsFaqs              CmsFaq[]
+  cmsGalleries         CmsGallery[]
+  cmsProducts          CmsProduct[]
+  cmsReports           CmsReport[]
+  cmsHeroSlides        CmsHeroSlide[]
+  masterItems          MasterItem[]
+
+  @@map("organizations")
+}
+
+model Branch {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String   @db.VarChar(50)
+  name           String   @db.VarChar(200)
+  address        String?  @db.Text
+  phone          String?  @db.VarChar(50)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization       Organization        @relation(fields: [organizationId], references: [id])
+  users              User[] // added backrelation for User.branch
+  leads              Lead[] // existing leads relation
+  creditApplications CreditApplication[]
+  fieldTasks         FieldTask[]
+  inventoryItems     InventoryItem[]
+  assets             Asset[]
+  purchaseRequests   PurchaseRequest[]
+  purchaseOrders     PurchaseOrder[]
+  goodsReceipts      GoodsReceipt[]
+
+  @@unique([organizationId, code])
+  @@map("branches")
+}
+
+model Department {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String   @db.VarChar(50)
+  name           String   @db.VarChar(200)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  users            User[]
+  purchaseRequests PurchaseRequest[]
+
+  @@unique([organizationId, code])
+  @@map("departments")
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  branchId       String?   @map("branch_id") @db.Uuid
+  departmentId   String?   @map("department_id") @db.Uuid
+  email          String    @unique @db.VarChar(255)
+  passwordHash   String?   @map("password_hash") @db.Text
+  fullName       String    @map("full_name") @db.VarChar(200)
+  employeeNumber String?   @map("employee_number") @db.VarChar(100)
+  phone          String?   @db.VarChar(50)
+  isActive       Boolean   @default(true) @map("is_active")
+  lastLoginAt    DateTime? @map("last_login_at") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  branch       Branch?      @relation(fields: [branchId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id])
+
+  leads Lead[] @relation("LeadOfficer") // reverse relation for assignedOfficer
+
+  userRoles UserRole[] // backrelation for UserRole.user
+
+  creditApplications              CreditApplication[]    @relation("CreditApplicant")
+  marketingCreditApplications     CreditApplication[]    @relation("CreditMarketingOfficer")
+  analystCreditApplications       CreditApplication[]    @relation("CreditAnalyst")
+  surveyCreditApplications        CreditApplication[]    @relation("CreditSurveyOfficer")
+  decisionCreditApplications      CreditApplication[]    @relation("CreditDecisionMaker")
+  statusChanges                   CreditStatusHistory[]
+  creditApprovals                 CreditApprovalRecord[]
+  assignedFieldTasks              FieldTask[]            @relation("OfficerFieldTasks")
+  uploadedDocuments               Document[]             @relation("DocumentUploader")
+  assignedAssets                  Asset[]                @relation("AssetCurrentHolder")
+  performedInventoryTransactions  InventoryTransaction[] @relation("InventoryTransactionPerformer")
+  performedAssetHistories         AssetHistory[]         @relation("AssetHistoryPerformer")
+  performedAssetMaintenances      AssetMaintenance[]     @relation("AssetMaintenancePerformer")
+  requestedPurchaseRequests       PurchaseRequest[]      @relation("PurchaseRequester")
+  createdPurchaseOrders           PurchaseOrder[]        @relation("PurchaseOrderCreator")
+  receivedGoodsReceipts           GoodsReceipt[]         @relation("GoodsReceiptReceiver")
+  performedWorkflowActions        WorkflowAction[]       @relation("WorkflowActionActor")
+  auditLogs                       AuditLog[]             @relation("AuditLogUser")
+  notifications                   Notification[]         @relation("UserNotifications")
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(100)
+  name        String   @db.VarChar(150)
+  description String?  @db.Text
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  users                UserRole[]
+  permissions          RolePermission[]
+  creditApprovalLimits CreditApprovalLimit[]
+  workflowSteps        WorkflowStep[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(150)
+  name        String   @db.VarChar(200)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId    String   @map("user_id") @db.Uuid
+  roleId    String   @map("role_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  APPLICATION
+  CONVERTED
+}
+
+model Lead {
+  id                String     @id @default(uuid()) @db.Uuid
+  organizationId    String     @map("organization_id") @db.Uuid
+  branchId          String?    @map("branch_id") @db.Uuid
+  source            String     @db.VarChar(100)
+  name              String     @db.VarChar(200)
+  phone             String?    @db.VarChar(50)
+  address           String?    @db.Text
+  productInterest   String?    @db.VarChar(200)
+  status            LeadStatus @default(NEW)
+  assignedOfficerId String?    @map("assigned_officer_id") @db.Uuid
+  notes             String?    @db.Text
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  branch          Branch?      @relation(fields: [branchId], references: [id])
+  assignedOfficer User?        @relation("LeadOfficer", fields: [assignedOfficerId], references: [id])
+  fieldTasks      FieldTask[]
+
+  @@map("leads")
+}
+
+enum CreditApplicationStatus {
+  DRAFT
+  SUBMITTED
+  VERIFICATION
+  ANALYSIS
+  SURVEY
+  REVIEW
+  DECISION
+  APPROVED
+  REJECTED
+  RETURNED
+}
+
+model CreditApplication {
+  id                         String                  @id @default(uuid()) @db.Uuid
+  organizationId             String                  @map("organization_id") @db.Uuid
+  branchId                   String?                 @map("branch_id") @db.Uuid
+  applicationNumber          String                  @unique @db.VarChar(50)
+  applicantId                String                  @map("applicant_id") @db.Uuid
+  product                    String?                 @db.VarChar(200)
+  requestedAmount            Float?
+  requestedTenorMonths       Int?
+  purpose                    String?                 @db.Text
+  source                     String?                 @db.VarChar(100)
+  assignedMarketingOfficerId String?                 @map("assigned_marketing_officer_id") @db.Uuid
+  assignedAnalystId          String?                 @map("assigned_analyst_id") @db.Uuid
+  assignedSurveyOfficerId    String?                 @map("assigned_survey_officer_id") @db.Uuid
+  status                     CreditApplicationStatus @default(DRAFT)
+  submissionDate             DateTime?               @map("submission_date") @db.Timestamptz
+  notes                      String?                 @db.Text
+
+  // Analisis 5C, Scoring & Survey Data (Configurable JSON)
+  analysisData Json? @map("analysis_data")
+  surveyData   Json? @map("survey_data")
+
+  // Keputusan Komite Kredit
+  approvedAmount      Float?    @map("approved_amount")
+  approvedTenorMonths Int?      @map("approved_tenor_months")
+  interestRate        Float?    @map("interest_rate")
+  decisionDate        DateTime? @map("decision_date") @db.Timestamptz
+  decisionMakerId     String?   @map("decision_maker_id") @db.Uuid
+  decisionNotes       String?   @map("decision_notes") @db.Text
+  conditions          String?   @db.Text
+
+  // Realisasi / Pencairan Kredit
+  realizationDate      DateTime? @map("realization_date") @db.Timestamptz
+  realizationReference String?   @map("realization_reference") @db.VarChar(100)
+  realizationAmount    Float?    @map("realization_amount")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  branch           Branch?      @relation(fields: [branchId], references: [id])
+  applicant        User         @relation("CreditApplicant", fields: [applicantId], references: [id])
+  marketingOfficer User?        @relation("CreditMarketingOfficer", fields: [assignedMarketingOfficerId], references: [id])
+  analyst          User?        @relation("CreditAnalyst", fields: [assignedAnalystId], references: [id])
+  surveyOfficer    User?        @relation("CreditSurveyOfficer", fields: [assignedSurveyOfficerId], references: [id])
+  decisionMaker    User?        @relation("CreditDecisionMaker", fields: [decisionMakerId], references: [id])
+
+  statusHistories CreditStatusHistory[]
+  approvalRecords CreditApprovalRecord[]
+  fieldTasks      FieldTask[]
+
+  @@map("credit_applications")
+}
+
+model CreditStatusHistory {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  creditApplicationId String                  @map("credit_application_id") @db.Uuid
+  status              CreditApplicationStatus
+  notes               String?                 @db.Text
+  changedById         String?                 @map("changed_by_id") @db.Uuid
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz
+
+  creditApplication CreditApplication @relation(fields: [creditApplicationId], references: [id], onDelete: Cascade)
+  changedBy         User?             @relation(fields: [changedById], references: [id])
+
+  @@map("credit_status_history")
+}
+
+model CreditApprovalLimit {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  roleId         String   @map("role_id") @db.Uuid
+  levelName      String   @map("level_name") @db.VarChar(100)
+  minAmount      Float    @default(0) @map("min_amount")
+  maxAmount      Float    @map("max_amount")
+  tierOrder      Int      @default(1) @map("tier_order")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  role         Role         @relation(fields: [roleId], references: [id])
+
+  @@map("credit_approval_limits")
+}
+
+model CreditApprovalRecord {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  creditApplicationId String                  @map("credit_application_id") @db.Uuid
+  approverId          String                  @map("approver_id") @db.Uuid
+  approverRoleName    String                  @map("approver_role_name") @db.VarChar(100)
+  status              CreditApplicationStatus
+  approvedAmount      Float?                  @map("approved_amount")
+  notes               String?                 @db.Text
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz
+
+  creditApplication CreditApplication @relation(fields: [creditApplicationId], references: [id], onDelete: Cascade)
+  approver          User              @relation(fields: [approverId], references: [id])
+
+  @@map("credit_approval_records")
+}
+
+enum FieldTaskType {
+  SURVEY
+  CUSTOMER_VISIT
+  FOLLOW_UP
+  DOCUMENT_PICKUP
+  COLLECTION
+  OTHER
+}
+
+enum FieldTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum FieldTaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model FieldTask {
+  id                  String            @id @default(uuid()) @db.Uuid
+  organizationId      String            @map("organization_id") @db.Uuid
+  branchId            String?           @map("branch_id") @db.Uuid
+  assignedOfficerId   String            @map("assigned_officer_id") @db.Uuid
+  creditApplicationId String?           @map("credit_application_id") @db.Uuid
+  leadId              String?           @map("lead_id") @db.Uuid
+  taskType            FieldTaskType     @default(SURVEY) @map("task_type")
+  priority            FieldTaskPriority @default(MEDIUM)
+  status              FieldTaskStatus   @default(PENDING)
+  title               String            @db.VarChar(200)
+  description         String?           @db.Text
+  customerName        String?           @map("customer_name") @db.VarChar(200)
+  customerPhone       String?           @map("customer_phone") @db.VarChar(50)
+  customerAddress     String?           @map("customer_address") @db.Text
+  dueDate             DateTime?         @map("due_date") @db.Timestamptz
+  completedAt         DateTime?         @map("completed_at") @db.Timestamptz
+  resultNotes         String?           @map("result_notes") @db.Text
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization      Organization       @relation(fields: [organizationId], references: [id])
+  branch            Branch?            @relation(fields: [branchId], references: [id])
+  assignedOfficer   User               @relation("OfficerFieldTasks", fields: [assignedOfficerId], references: [id])
+  creditApplication CreditApplication? @relation(fields: [creditApplicationId], references: [id], onDelete: SetNull)
+  lead              Lead?              @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@map("field_tasks")
+}
+
+enum DocumentOwnerType {
+  CREDIT_APPLICATION
+  LEAD
+  CUSTOMER
+  INTERNAL
+  ASSET
+  INVENTORY
+  PURCHASE_REQUEST
+  PURCHASE_ORDER
+  GOODS_RECEIPT
+  VENDOR
+}
+
+enum DocumentType {
+  KTP
+  KK
+  INCOME_PROOF
+  BUSINESS_DOC
+  SURVEY_PHOTO
+  COLLATERAL_DOC
+  APPROVAL_DOC
+  OTHER
+}
+
+model Document {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  ownerType      DocumentOwnerType @map("owner_type")
+  ownerId        String            @map("owner_id") @db.VarChar(100)
+  documentType   DocumentType      @map("document_type")
+  fileName       String            @map("file_name") @db.VarChar(255)
+  filePath       String            @map("file_path") @db.Text
+  fileExt        String?           @map("file_ext") @db.VarChar(20)
+  fileSize       Int               @map("file_size") // in bytes
+  mimeType       String            @map("mime_type") @db.VarChar(100)
+  uploadedById   String            @map("uploaded_by_id") @db.Uuid
+  status         String            @default("ACTIVE") @db.VarChar(50)
+  notes          String?           @db.Text
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  uploadedBy   User         @relation("DocumentUploader", fields: [uploadedById], references: [id])
+
+  @@map("documents")
+}
+
+// ==========================================
+// SECTION 18: INVENTORY MANAGEMENT (STOK BARANG & ATK)
+// ==========================================
+
+enum InventoryTransactionType {
+  STOCK_IN
+  STOCK_OUT
+  ADJUSTMENT
+}
+
+model InventoryItem {
+  id              String   @id @default(uuid()) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  branchId        String?  @map("branch_id") @db.Uuid
+  itemCode        String   @map("item_code") @db.VarChar(50)
+  name            String   @db.VarChar(200)
+  category        String   @db.VarChar(100) // e.g. ATK, Formulir & Kertas, Toner & Cartridge, Kebersihan, Lainnya
+  unit            String   @db.VarChar(50) // e.g. Rim, Box, Pcs, Pack, Lusin
+  currentStock    Int      @default(0) @map("current_stock")
+  minStock        Int      @default(5) @map("min_stock")
+  storageLocation String?  @map("storage_location") @db.VarChar(200)
+  unitPrice       Float?   @map("unit_price")
+  notes           String?  @db.Text
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization           @relation(fields: [organizationId], references: [id])
+  branch       Branch?                @relation(fields: [branchId], references: [id])
+  transactions InventoryTransaction[]
+
+  @@unique([organizationId, itemCode])
+  @@map("inventory_items")
+}
+
+model InventoryTransaction {
+  id              String                   @id @default(uuid()) @db.Uuid
+  itemId          String                   @map("item_id") @db.Uuid
+  type            InventoryTransactionType
+  quantity        Int
+  stockBefore     Int                      @map("stock_before")
+  stockAfter      Int                      @map("stock_after")
+  referenceNumber String?                  @map("reference_number") @db.VarChar(100)
+  notes           String?                  @db.Text
+  performedById   String?                  @map("performed_by_id") @db.Uuid
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz
+
+  item        InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  performedBy User?         @relation("InventoryTransactionPerformer", fields: [performedById], references: [id])
+
+  @@map("inventory_transactions")
+}
+
+// ==========================================
+// SECTION 19: ASSET MANAGEMENT (ASET OPERASIONAL)
+// ==========================================
+
+enum AssetCondition {
+  GOOD
+  FAIR
+  DAMAGED
+  IN_REPAIR
+  DISPOSED
+}
+
+enum AssetStatus {
+  PURCHASED
+  ASSIGNED
+  TRANSFERRED
+  MAINTENANCE
+  RETURNED
+  DISPOSED
+}
+
+model Asset {
+  id              String         @id @default(uuid()) @db.Uuid
+  organizationId  String         @map("organization_id") @db.Uuid
+  branchId        String?        @map("branch_id") @db.Uuid
+  assetNumber     String         @map("asset_number") @db.VarChar(100)
+  name            String         @db.VarChar(200)
+  category        String         @db.VarChar(100) // e.g. IT Equipment, Office Furniture, Kendaraan Operasional, Elektronik
+  serialNumber    String?        @map("serial_number") @db.VarChar(100)
+  purchaseDate    DateTime?      @map("purchase_date") @db.Timestamptz
+  purchasePrice   Float?         @map("purchase_price")
+  vendor          String?        @db.VarChar(200)
+  warrantyExpiry  DateTime?      @map("warranty_expiry") @db.Timestamptz
+  location        String?        @db.VarChar(200)
+  currentHolderId String?        @map("current_holder_id") @db.Uuid
+  condition       AssetCondition @default(GOOD)
+  status          AssetStatus    @default(PURCHASED)
+  notes           String?        @db.Text
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization  Organization       @relation(fields: [organizationId], references: [id])
+  branch        Branch?            @relation(fields: [branchId], references: [id])
+  currentHolder User?              @relation("AssetCurrentHolder", fields: [currentHolderId], references: [id])
+  histories     AssetHistory[]
+  maintenances  AssetMaintenance[]
+
+  @@unique([organizationId, assetNumber])
+  @@map("assets")
+}
+
+model AssetHistory {
+  id            String          @id @default(uuid()) @db.Uuid
+  assetId       String          @map("asset_id") @db.Uuid
+  action        String          @db.VarChar(100) // PURCHASE, ASSIGNMENT, TRANSFER, MAINTENANCE, RETURN, DISPOSAL
+  fromHolderId  String?         @map("from_holder_id") @db.Uuid
+  toHolderId    String?         @map("to_holder_id") @db.Uuid
+  fromLocation  String?         @map("from_location") @db.VarChar(200)
+  toLocation    String?         @map("to_location") @db.VarChar(200)
+  condition     AssetCondition?
+  status        AssetStatus?
+  notes         String?         @db.Text
+  performedById String?         @map("performed_by_id") @db.Uuid
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  asset       Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  performedBy User? @relation("AssetHistoryPerformer", fields: [performedById], references: [id])
+
+  @@map("asset_histories")
+}
+
+model AssetMaintenance {
+  id             String    @id @default(uuid()) @db.Uuid
+  assetId        String    @map("asset_id") @db.Uuid
+  title          String    @db.VarChar(200)
+  description    String?   @db.Text
+  cost           Float?
+  vendor         String?   @db.VarChar(200)
+  technician     String?   @db.VarChar(150)
+  startDate      DateTime? @map("start_date") @db.Timestamptz
+  completionDate DateTime? @map("completion_date") @db.Timestamptz
+  status         String    @default("SCHEDULED") @db.VarChar(50) // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED
+  notes          String?   @db.Text
+  performedById  String?   @map("performed_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  asset       Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  performedBy User? @relation("AssetMaintenancePerformer", fields: [performedById], references: [id])
+
+  @@map("asset_maintenances")
+}
+
+// ==========================================
+// SECTION 20: PURCHASING & PROCUREMENT MODULE
+// ==========================================
+
+model Vendor {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String   @db.VarChar(50)
+  name           String   @db.VarChar(200)
+  category       String   @db.VarChar(100)
+  contactPerson  String?  @map("contact_person") @db.VarChar(150)
+  phone          String?  @db.VarChar(50)
+  email          String?  @db.VarChar(150)
+  address        String?  @db.Text
+  bankName       String?  @map("bank_name") @db.VarChar(100)
+  bankAccount    String?  @map("bank_account") @db.VarChar(100)
+  bankHolder     String?  @map("bank_holder") @db.VarChar(150)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  purchaseOrders PurchaseOrder[]
+
+  @@unique([organizationId, code])
+  @@map("vendors")
+}
+
+enum PurchaseRequestStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model PurchaseRequest {
+  id                   String                @id @default(uuid()) @db.Uuid
+  organizationId       String                @map("organization_id") @db.Uuid
+  branchId             String?               @map("branch_id") @db.Uuid
+  departmentId         String?               @map("department_id") @db.Uuid
+  requestNumber        String                @map("request_number") @db.VarChar(50)
+  requesterId          String                @map("requester_id") @db.Uuid
+  title                String                @db.VarChar(200)
+  purpose              String                @db.Text
+  requiredDate         DateTime?             @map("required_date") @db.Timestamptz
+  status               PurchaseRequestStatus @default(DRAFT)
+  totalEstimatedAmount Float                 @default(0) @map("total_estimated_amount")
+  notes                String?               @db.Text
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization      Organization          @relation(fields: [organizationId], references: [id])
+  branch            Branch?               @relation(fields: [branchId], references: [id])
+  department        Department?           @relation(fields: [departmentId], references: [id])
+  requester         User                  @relation("PurchaseRequester", fields: [requesterId], references: [id])
+  items             PurchaseRequestItem[]
+  purchaseOrders    PurchaseOrder[]
+  workflowInstances WorkflowInstance[]
+
+  @@unique([organizationId, requestNumber])
+  @@map("purchase_requests")
+}
+
+model PurchaseRequestItem {
+  id                String   @id @default(uuid()) @db.Uuid
+  purchaseRequestId String   @map("purchase_request_id") @db.Uuid
+  itemName          String   @map("item_name") @db.VarChar(200)
+  category          String?  @db.VarChar(100)
+  unit              String   @db.VarChar(50)
+  quantity          Int
+  estimatedPrice    Float    @map("estimated_price")
+  totalPrice        Float    @map("total_price")
+  itemType          String   @default("INVENTORY") @map("item_type") @db.VarChar(50) // INVENTORY, ASSET, SERVICE
+  inventoryItemId   String?  @map("inventory_item_id") @db.Uuid
+  notes             String?  @db.Text
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  purchaseRequest PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_request_items")
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  ISSUED
+  PARTIAL_RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id                   String              @id @default(uuid()) @db.Uuid
+  organizationId       String              @map("organization_id") @db.Uuid
+  branchId             String?             @map("branch_id") @db.Uuid
+  vendorId             String              @map("vendor_id") @db.Uuid
+  purchaseRequestId    String?             @map("purchase_request_id") @db.Uuid
+  poNumber             String              @map("po_number") @db.VarChar(50)
+  poDate               DateTime            @default(now()) @map("po_date") @db.Timestamptz
+  expectedDeliveryDate DateTime?           @map("expected_delivery_date") @db.Timestamptz
+  paymentTerms         String?             @map("payment_terms") @db.VarChar(100)
+  status               PurchaseOrderStatus @default(DRAFT)
+  subtotal             Float               @default(0)
+  taxAmount            Float               @default(0) @map("tax_amount")
+  totalAmount          Float               @default(0) @map("total_amount")
+  notes                String?             @db.Text
+  createdById          String              @map("created_by_id") @db.Uuid
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization    Organization        @relation(fields: [organizationId], references: [id])
+  branch          Branch?             @relation(fields: [branchId], references: [id])
+  vendor          Vendor              @relation(fields: [vendorId], references: [id])
+  purchaseRequest PurchaseRequest?    @relation(fields: [purchaseRequestId], references: [id], onDelete: SetNull)
+  createdBy       User                @relation("PurchaseOrderCreator", fields: [createdById], references: [id])
+  items           PurchaseOrderItem[]
+  goodsReceipts   GoodsReceipt[]
+
+  @@unique([organizationId, poNumber])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId  String   @map("purchase_order_id") @db.Uuid
+  itemName         String   @map("item_name") @db.VarChar(200)
+  unit             String   @db.VarChar(50)
+  quantityOrdered  Int      @map("quantity_ordered")
+  quantityReceived Int      @default(0) @map("quantity_received")
+  unitPrice        Float    @map("unit_price")
+  totalPrice       Float    @map("total_price")
+  itemType         String   @default("INVENTORY") @map("item_type") @db.VarChar(50)
+  inventoryItemId  String?  @map("inventory_item_id") @db.Uuid
+  notes            String?  @db.Text
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  purchaseOrder     PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  goodsReceiptItems GoodsReceiptItem[]
+
+  @@map("purchase_order_items")
+}
+
+model GoodsReceipt {
+  id                 String   @id @default(uuid()) @db.Uuid
+  organizationId     String   @map("organization_id") @db.Uuid
+  branchId           String?  @map("branch_id") @db.Uuid
+  purchaseOrderId    String   @map("purchase_order_id") @db.Uuid
+  receiptNumber      String   @map("receipt_number") @db.VarChar(50)
+  receiptDate        DateTime @default(now()) @map("receipt_date") @db.Timestamptz
+  deliveryNoteNumber String?  @map("delivery_note_number") @db.VarChar(100)
+  receivedById       String   @map("received_by_id") @db.Uuid
+  status             String   @default("RECEIVED") @db.VarChar(50)
+  notes              String?  @db.Text
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization  Organization       @relation(fields: [organizationId], references: [id])
+  branch        Branch?            @relation(fields: [branchId], references: [id])
+  purchaseOrder PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  receivedBy    User               @relation("GoodsReceiptReceiver", fields: [receivedById], references: [id])
+  items         GoodsReceiptItem[]
+
+  @@unique([organizationId, receiptNumber])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  goodsReceiptId   String   @map("goods_receipt_id") @db.Uuid
+  poItemId         String   @map("po_item_id") @db.Uuid
+  itemName         String   @map("item_name") @db.VarChar(200)
+  unit             String   @db.VarChar(50)
+  quantityReceived Int      @map("quantity_received")
+  condition        String   @default("GOOD") @db.VarChar(50)
+  itemType         String   @default("INVENTORY") @map("item_type") @db.VarChar(50)
+  inventoryItemId  String?  @map("inventory_item_id") @db.Uuid
+  isStocked        Boolean  @default(false) @map("is_stocked")
+  notes            String?  @db.Text
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  goodsReceipt GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  poItem       PurchaseOrderItem @relation(fields: [poItemId], references: [id], onDelete: Cascade)
+
+  @@map("goods_receipt_items")
+}
+
+// ==========================================
+// SECTION 21: WORKFLOW & APPROVAL ENGINE
+// ==========================================
+
+model Workflow {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  module         String   @db.VarChar(100) // PURCHASING, CREDIT, EXPENSE
+  name           String   @db.VarChar(200)
+  description    String?  @db.Text
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization       @relation(fields: [organizationId], references: [id])
+  steps        WorkflowStep[]
+  instances    WorkflowInstance[]
+
+  @@unique([organizationId, module])
+  @@map("workflows")
+}
+
+model WorkflowStep {
+  id             String   @id @default(uuid()) @db.Uuid
+  workflowId     String   @map("workflow_id") @db.Uuid
+  stepOrder      Int      @map("step_order")
+  name           String   @db.VarChar(200)
+  approverRoleId String?  @map("approver_role_id") @db.Uuid
+  minAmount      Float    @default(0) @map("min_amount")
+  maxAmount      Float?   @map("max_amount")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  workflow     Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  approverRole Role?    @relation(fields: [approverRoleId], references: [id])
+
+  @@unique([workflowId, stepOrder])
+  @@map("workflow_steps")
+}
+
+model WorkflowInstance {
+  id                String   @id @default(uuid()) @db.Uuid
+  workflowId        String?  @map("workflow_id") @db.Uuid
+  entityType        String   @map("entity_type") @db.VarChar(100) // e.g. PURCHASE_REQUEST
+  entityId          String   @map("entity_id") @db.VarChar(100)
+  currentStep       Int      @default(1) @map("current_step")
+  status            String   @default("PENDING") @db.VarChar(50) // PENDING, APPROVED, REJECTED, RETURNED
+  purchaseRequestId String?  @map("purchase_request_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  workflow        Workflow?        @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  purchaseRequest PurchaseRequest? @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  actions         WorkflowAction[]
+
+  @@map("workflow_instances")
+}
+
+model WorkflowAction {
+  id         String   @id @default(uuid()) @db.Uuid
+  instanceId String   @map("instance_id") @db.Uuid
+  stepNumber Int      @map("step_number")
+  actorId    String   @map("actor_id") @db.Uuid
+  action     String   @db.VarChar(50) // SUBMIT, APPROVE, REJECT, RETURN
+  comment    String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  instance WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  actor    User             @relation("WorkflowActionActor", fields: [actorId], references: [id])
+
+  @@map("workflow_actions")
+}
+
+// ==========================================
+// SECTION 22: AUDIT TRAIL ENGINE
+// ==========================================
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  action         String   @db.VarChar(50) // CREATE, UPDATE, DELETE, APPROVE, REJECT, LOGIN, LOGOUT, UPLOAD, DOWNLOAD, STATUS_CHANGE, ASSIGN, TRANSFER, DISPOSAL
+  entityType     String   @map("entity_type") @db.VarChar(100) // CREDIT_APPLICATION, LEAD, PURCHASE_REQUEST, PURCHASE_ORDER, INVENTORY_ITEM, ASSET, DOCUMENT, USER
+  entityId       String   @map("entity_id") @db.VarChar(100)
+  oldValues      Json?    @map("old_values")
+  newValues      Json?    @map("new_values")
+  ipAddress      String?  @map("ip_address") @db.VarChar(50)
+  userAgent      String?  @map("user_agent") @db.Text
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User?        @relation("AuditLogUser", fields: [userId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+// ==========================================
+// SECTION 24: CMS (CONTENT MANAGEMENT)
+// ==========================================
+
+model CmsBanner {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  title          String   @db.VarChar(200)
+  subtitle       String?  @db.Text
+  imageUrl       String?  @map("image_url") @db.Text
+  ctaText        String?  @map("cta_text") @db.VarChar(100)
+  ctaLink        String?  @map("cta_link") @db.VarChar(255)
+  isActive       Boolean  @default(true) @map("is_active")
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, isActive])
+  @@map("cms_banners")
+}
+
+model CmsPost {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  title          String    @db.VarChar(255)
+  slug           String    @db.VarChar(255)
+  category       String    @default("BERITA") @db.VarChar(100) // BERITA, PROMO, EDUKASI, PENGUMUMAN
+  excerpt        String?   @db.Text
+  content        String    @db.Text
+  featuredImage  String?   @map("featured_image") @db.Text
+  status         String    @default("PUBLISHED") @db.VarChar(50) // DRAFT, PUBLISHED, ARCHIVED
+  publishedAt    DateTime? @map("published_at") @db.Timestamptz
+  authorName     String?   @map("author_name") @db.VarChar(150)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, status])
+  @@map("cms_posts")
+}
+
+model CmsFaq {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  category       String   @default("UMUM") @db.VarChar(100) // UMUM, KREDIT, TABUNGAN, DEPOSITO, PERSYARATAN
+  question       String   @db.VarChar(255)
+  answer         String   @db.Text
+  sortOrder      Int      @default(0) @map("sort_order")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, isActive])
+  @@map("cms_faqs")
+}
+
+model CmsGallery {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  title          String    @db.VarChar(200)
+  description    String?   @db.Text
+  imageUrl       String    @map("image_url") @db.Text
+  category       String    @default("KEGIATAN") @db.VarChar(100) // KEGIATAN, CSR, SOSIALISASI, RAPAT, PENGHARGAAN
+  eventDate      DateTime? @map("event_date") @db.Timestamptz
+  isActive       Boolean   @default(true) @map("is_active")
+  sortOrder      Int       @default(0) @map("sort_order")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, isActive])
+  @@map("cms_galleries")
+}
+
+model CmsProduct {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String    @db.VarChar(200)
+  slug           String    @db.VarChar(200)
+  category       String    @default("KREDIT") @db.VarChar(100) // KREDIT, SIMPANAN, DEPOSITO, LAYANAN
+  description    String    @db.Text
+  features       String    @default("[]") @db.Text // JSON string of bullet points: ["Plafon s.d...", ...]
+  icon           String?   @default("Briefcase") @db.VarChar(50) // Briefcase, CreditCard, PiggyBank, Building2, ShieldCheck, Landmark, Wallet, Coins
+  badge          String?   @db.VarChar(100) // Populer, Bunga Rendah, Dijamin LPS
+  ctaText        String?   @default("Ajukan Pinjaman") @map("cta_text") @db.VarChar(100)
+  ctaLink        String?   @default("#form-pengajuan") @map("cta_link") @db.VarChar(255)
+  sortOrder      Int       @default(0) @map("sort_order")
+  isActive       Boolean   @default(true) @map("is_active")
+  isDefault      Boolean   @default(false) @map("is_default")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, isActive])
+  @@map("cms_products")
+}
+
+model CmsReport {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  title          String    @db.VarChar(255)
+  slug           String    @db.VarChar(255)
+  category       String    @default("KEUANGAN") @db.VarChar(100) // KEUANGAN, TATA_KELOLA, TAHUNAN, KEBERLANJUTAN, LAINNYA
+  period         String?   @db.VarChar(100) // e.g. "Triwulan I", "Triwulan II", "Semester I", "Tahunan"
+  year           Int?      // e.g. 2026
+  description    String?   @db.Text
+  fileUrl        String    @map("file_url") @db.Text
+  fileName       String?   @map("file_name") @db.VarChar(255)
+  fileSize       Int?      @map("file_size") // in bytes
+  publishedAt    DateTime? @map("published_at") @db.Timestamptz
+  isActive       Boolean   @default(true) @map("is_active")
+  sortOrder      Int       @default(0) @map("sort_order")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, isActive])
+  @@index([organizationId, category])
+  @@map("cms_reports")
+}
+
+model CmsHeroSlide {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  title          String?  @db.VarChar(200)
+  altText        String?  @map("alt_text") @db.VarChar(255)
+  imageUrl       String   @map("image_url") @db.Text
+  sortOrder      Int      @default(0) @map("sort_order")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, isActive])
+  @@map("cms_hero_slides")
+}
+
+// ==========================================
+// SECTION 25: NOTIFICATIONS ENGINE
+// ==========================================
+
+model Notification {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  title          String    @db.VarChar(200)
+  message        String    @db.Text
+  type           String    @default("INFO") @db.VarChar(50) // INFO, WARNING, SUCCESS, APPROVAL_REQUEST, TASK_ASSIGNED, CREDIT_STATUS
+  linkUrl        String?   @map("link_url") @db.VarChar(255)
+  isRead         Boolean   @default(false) @map("is_read")
+  readAt         DateTime? @map("read_at") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([organizationId, createdAt])
+  @@map("notifications")
+}
+
+// ==========================================
+// SECTION 26: CENTRALIZED MASTER DATA
+// ==========================================
+
+model MasterItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  category       String   @db.VarChar(100) // LOAN_PRODUCT, POSITION, ASSET_CATEGORY, INVENTORY_CATEGORY, LEAD_SOURCE, VENDOR_CATEGORY, UNIT
+  code           String   @db.VarChar(100)
+  name           String   @db.VarChar(200)
+  description    String?  @db.Text
+  attributes     Json?
+  isActive       Boolean  @default(true) @map("is_active")
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, category, code])
+  @@index([organizationId, category, isActive])
+  @@map("master_items")
+}
+
+
+
