@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { LogoutButton } from "@/app/(dashboard)/LogoutButton";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { ThemeToggle } from "@/components/public/ThemeToggle";
 
 export type MenuVisibility = {
   showCrm: boolean;
@@ -424,6 +425,7 @@ export function DashboardShell({
 
         {/* Header Right Actions */}
         <div className="ml-auto flex items-center gap-3">
+          <ThemeToggle />
           <NotificationBell />
           <div className="hidden sm:flex flex-col items-end">
             <span className="text-sm font-semibold leading-none text-foreground">{userName}</span>

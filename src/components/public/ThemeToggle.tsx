@@ -2,26 +2,34 @@
 
 import * as React from "react"
 import { useTheme } from "next-themes"
+import { Moon, Sun } from "lucide-react"
+import { Toggle } from "@/components/animate-ui/components/radix/toggle"
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = React.useState(false)
-
-  // useEffect digunakan untuk mencegah hydration error
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
+  const { resolvedTheme, setTheme } = useTheme()
+  // Tema hanya diketahui di client; server & hydration render placeholder berukuran sama
+  const mounted = React.useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  )
 
   if (!mounted) {
-    return null // Return null atau skeleton saat server-side rendering
+    return <span aria-hidden="true" className="inline-block size-9" />
   }
 
+  // resolvedTheme (bukan theme) agar mode "system" tetap dibaca dengan benar
+  const isDark = resolvedTheme === "dark"
+
   return (
-    <button
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-      className="absolute top-6 right-4 px-4 py-2 rounded-full transition ease-in bg-foreground text-primary-foreground dark:bg-primary-dark"
+    <Toggle
+      pressed={isDark}
+      onPressedChange={(pressed) => setTheme(pressed ? "dark" : "light")}
+      className="text-muted-foreground hover:text-foreground"
     >
-      {theme === "dark" ? "☀️" : "🌙"}
-    </button>
+      {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+      {/* Nama aksesibel untuk tombol; aria-label tidak diteruskan ke <button> oleh wrapper animate-ui */}
+      <span className="sr-only">{isDark ? "Beralih ke mode terang" : "Beralih ke mode gelap"}</span>
+    </Toggle>
   )
 }

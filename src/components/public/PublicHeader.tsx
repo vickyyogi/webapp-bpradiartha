@@ -252,11 +252,11 @@ export function PublicHeader() {
               <Phone className="h-3.5 w-3.5" />
               Kontak
             </Link>
-            <ThemeToggle />
           </nav>
 
           {/* Action Button & Mobile Menu Toggle */}
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <Link href="/#form-pengajuan">
               <Button className="gap-2 font-semibold shadow-xs text-xs sm:text-sm bg-primary text-primary-foreground hover:bg-primary-dark cursor-pointer">
                 Ajukan Pinjaman <ChevronRight className="h-4 w-4" />

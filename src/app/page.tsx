@@ -332,13 +332,13 @@ export default function PublicLandingPage() {
 
                 {/* Framed portrait slideshow */}
                 <div
-                  className="group relative overflow-hidden rounded-[2rem] border border-gold/30 bg-gradient-to-b from-primary-soft/90 via-white to-gold-soft/80 shadow-2xl shadow-black/40 ring-1 ring-white/10"
+                  className="group relative overflow-hidden rounded-[2rem] border border-gold/30 bg-gradient-to-b from-primary-soft/90 via-card to-gold-soft/80 shadow-2xl shadow-black/40 ring-1 ring-white/10"
                   onMouseEnter={() => setHeroPaused(true)}
                   onMouseLeave={() => setHeroPaused(false)}
                 >
                   <div
                     aria-hidden="true"
-                    className="pointer-events-none absolute inset-x-0 top-0 z-20 h-24 bg-gradient-to-b from-white/60 to-transparent"
+                    className="pointer-events-none absolute inset-x-0 top-0 z-20 h-24 bg-gradient-to-b from-card/60 to-transparent"
                   />
 
                   <div className="relative aspect-[1100/1400] w-full">
@@ -359,7 +359,7 @@ export default function PublicLandingPage() {
                   </div>
 
                   {/* Slide indicators */}
-                  <div className="absolute right-4 top-4 z-20 flex items-center gap-1.5 rounded-full border border-border/60 bg-white/85 px-2.5 py-1.5 shadow-sm backdrop-blur">
+                  <div className="absolute right-4 top-4 z-20 flex items-center gap-1.5 rounded-full border border-border/60 bg-card/85 px-2.5 py-1.5 shadow-sm backdrop-blur">
                     {heroImages.map((slide, i) => (
                       <button
                         key={slide.src}
@@ -377,7 +377,7 @@ export default function PublicLandingPage() {
 
                 {/* Floating trust card */}
                 <div className="absolute inset-x-4 -bottom-6 z-30 sm:inset-x-6">
-                  <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-white/95 px-4 py-3 shadow-xl backdrop-blur-md">
+                  <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card/95 px-4 py-3 shadow-xl backdrop-blur-md">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                       <ShieldCheck className="h-5 w-5" />
                     </div>

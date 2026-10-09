@@ -86,7 +86,7 @@ export default function UsersPage() {
         </Button>
       </div>
 
-      <div className="flex items-center space-x-2 bg-white p-4 rounded-lg shadow-sm">
+      <div className="flex items-center space-x-2 bg-card p-4 rounded-lg shadow-sm">
         <Search className="w-5 h-5 text-gray-400" />
         <Input
           type="text"
@@ -97,7 +97,7 @@ export default function UsersPage() {
         />
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+      <div className="bg-card rounded-lg shadow-sm border overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>

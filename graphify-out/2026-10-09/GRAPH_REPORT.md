@@ -1,30 +1,30 @@
-# Graph Report - webapp-bpradiartha  (2026-10-09)
+# Graph Report - webapp-bpradiartha  (2026-10-06)
 
 ## Corpus Check
-- 236 files · ~1,056,382 words
+- 201 files · ~1,009,774 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 5 file(s) not represented in the graph (top: (none) 1, .toml 1, .prisma 1)
 
 ## Summary
-- 1671 nodes · 3691 edges · 148 communities (88 shown, 60 thin omitted)
-- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.92)
+- 1241 nodes · 3221 edges · 124 communities (64 shown, 60 thin omitted)
+- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 2 edges (avg confidence: 0.9)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e7038c4b`
+- Built from commit: `d56e814b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - Button
-- requireAuthAndPermission
+- extractClientInfo
 - AI_CODING_AGENT_INSTRUCTIONS.md
+- requireAuthAndPermission
 - next-auth
-- next
 - PROJECT_SPEC.md
 - CREDIT_WORKFLOW.md
 - 5. Permission Catalog
-- Expo Animation Recipes
+- next
 - permissions.ts
 - notificationService
 - components.json
@@ -32,7 +32,7 @@
 - package.json
 - compilerOptions
 - DATABASE_ERD.md
-- UserFormPage.tsx
+- dropdown-menu.tsx
 - Prisma Platform core concepts
 - Prisma Platform core concepts
 - Prisma Platform core concepts
@@ -65,7 +65,7 @@
 - 3. Authentication ERD
 - 27. Documents
 - 28. Inventory
-- Worst-Case Catalog
+- eslint.config.mjs
 - BPR Operational Management System
 - 33. Development Principles for AI Coding Agents
 - 5. High-Level Application Areas
@@ -137,80 +137,55 @@
 - 9. Permissions
 - postcss.config.mjs
 - 8. CRM Module
-- Animation Recipes
-- Animation Standards Reference
-- Animation Audit Playbook
-- Write Swift
-- Apple Design
-- The Fixes
-- Prototyping Variants
-- primitives/radix/toggle.tsx
-- Glossary
-- Finding Animation Opportunities
-- Find Skills
-- Working With Sonner
-- The list
-- Design Engineering
-- Component Building Principles
-- hero-image.ts
-- The Animation Decision Framework
-- Performance Rules
-- Gesture and Drag Interactions
-- CSS Transform Mastery
-- The Sonner Principles (Building Loved Components)
-- Spring Animations
-- Core Philosophy
-- Debugging Animations
-- frontend-design/SKILL.md
 
 ## God Nodes (most connected - your core abstractions)
-1. `next` - 136 edges
+1. `next` - 132 edges
 2. `requireAuthAndPermission()` - 122 edges
-3. `Button()` - 90 edges
-4. `Card()` - 77 edges
-5. `Badge()` - 76 edges
-6. `db` - 76 edges
-7. `CardTitle()` - 71 edges
-8. `next-auth` - 70 edges
-9. `CardHeader()` - 70 edges
-10. `CardContent()` - 70 edges
+3. `Button()` - 88 edges
+4. `Badge()` - 76 edges
+5. `db` - 76 edges
+6. `Card()` - 75 edges
+7. `next-auth` - 70 edges
+8. `CardTitle()` - 69 edges
+9. `CardHeader()` - 68 edges
+10. `CardContent()` - 68 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Principle` --references--> `CreditApplication`  [INFERRED]
   docs/CREDIT_DATA_DATABASE.md → src/app/(dashboard)/credit/applications/CreditApplicationsClientView.tsx
-- `Scroll reveal` --references--> `useInView()`  [INFERRED]
-  .agents/skills/animate/RECIPES.md → src/lib/useInView.ts
-- `Image reveals on scroll` --references--> `useInView()`  [INFERRED]
-  .agents/skills/emil-design-eng/SKILL.md → src/lib/useInView.ts
 - `CreditApplicationsPage()` --calls--> `CreditApplicationsClientView()`  [EXTRACTED]
   src/app/(dashboard)/credit/applications/page.tsx → src/app/(dashboard)/credit/applications/CreditApplicationsClientView.tsx
 - `CreditApplicationDetailPage()` --calls--> `CreditApplicationDetailClientView()`  [EXTRACTED]
   src/app/(dashboard)/credit/applications/[id]/page.tsx → src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx
+- `LeadsPage()` --calls--> `LeadsClientView()`  [EXTRACTED]
+  src/app/(dashboard)/crm/leads/page.tsx → src/app/(dashboard)/crm/leads/LeadsClientView.tsx
+- `GET()` --calls--> `requireAuthAndPermission()`  [EXTRACTED]
+  src/app/api/admin/permissions/route.ts → src/lib/permissions.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (148 total, 60 thin omitted)
+## Communities (124 total, 60 thin omitted)
 
 ### Community 0 - "Button"
-Cohesion: 0.07
-Nodes (139): cn, lucide-react, react, BeritaPage(), Post, BeritaDetailPage(), Props, BranchesPage() (+131 more)
+Cohesion: 0.06
+Nodes (150): cn, lucide-react, react, BeritaPage(), Post, BeritaDetailPage(), Props, BranchesPage() (+142 more)
 
-### Community 1 - "requireAuthAndPermission"
-Cohesion: 0.10
-Nodes (36): DELETE(), PUT(), POST(), DELETE(), PUT(), GET(), POST(), DELETE() (+28 more)
+### Community 1 - "extractClientInfo"
+Cohesion: 0.09
+Nodes (32): DELETE(), PUT(), DELETE(), PUT(), GET(), POST(), DELETE(), PUT() (+24 more)
 
 ### Community 2 - "AI_CODING_AGENT_INSTRUCTIONS.md"
 Cohesion: 0.04
 Nodes (53): 10. Prisma Rules, 11. Database History, 12. Delete Policy, 13. Authentication, 14. Authorization, 15. RBAC and Scope, 16. Segregation of Duties, 17. Validation (+45 more)
 
-### Community 3 - "next-auth"
-Cohesion: 0.12
-Nodes (11): next-auth, DELETE(), GET(), PUT(), DELETE(), GET(), GET(), PUT() (+3 more)
+### Community 3 - "requireAuthAndPermission"
+Cohesion: 0.09
+Nodes (32): @prisma/client, POST(), POST(), GET(), PUT(), GET(), POST(), DELETE() (+24 more)
 
-### Community 4 - "next"
-Cohesion: 0.05
-Nodes (48): next, @prisma/client, POST(), POST(), POST(), GET(), PUT(), GET() (+40 more)
+### Community 4 - "next-auth"
+Cohesion: 0.08
+Nodes (25): next-auth, POST(), GET(), authOptions, handler, POST(), GET(), GET() (+17 more)
 
 ### Community 5 - "PROJECT_SPEC.md"
 Cohesion: 0.05
@@ -224,13 +199,13 @@ Nodes (29): 10. Return / Correction, 11. Status Transition Rules, 12. State Tran
 Cohesion: 0.06
 Nodes (29): 10. Future Extension, 1. Purpose, 2. Authorization Model, 3. Initial Roles, 4. Permission Naming Convention, 5.10 Documents, 5.11 Inventory, 5.12 Assets (+21 more)
 
-### Community 8 - "Expo Animation Recipes"
-Cohesion: 0.06
-Nodes (33): Bottom sheet you can drag to dismiss, Collapsing header on scroll, Expo Animation Recipes, Firing something once at a threshold, Keyboard-synced UI, List entrances, Press feedback, Screen transitions (Expo Router) (+25 more)
+### Community 8 - "next"
+Cohesion: 0.09
+Nodes (5): next, POST(), slugify(), db, config
 
 ### Community 9 - "permissions.ts"
-Cohesion: 0.12
-Nodes (19): GET(), GET(), POST(), SEED_PERMISSIONS, DELETE(), GET(), PUT(), RouteParams (+11 more)
+Cohesion: 0.11
+Nodes (20): GET(), POST(), GET(), POST(), SEED_PERMISSIONS, DELETE(), GET(), PUT() (+12 more)
 
 ### Community 10 - "notificationService"
 Cohesion: 0.17
@@ -238,15 +213,15 @@ Nodes (8): EmailNotificationProvider, InAppNotificationProvider, notificationSer
 
 ### Community 11 - "components.json"
 Cohesion: 0.09
-Nodes (22): aliases, components, hooks, lib, ui, utils, iconLibrary, menuAccent (+14 more)
+Nodes (21): aliases, components, hooks, lib, ui, utils, iconLibrary, menuAccent (+13 more)
 
 ### Community 12 - "DATABASE_SCHEMA.md"
 Cohesion: 0.10
 Nodes (18): 20. Surveys, 26. Field Activities, 2. PostgreSQL Conventions, 30. Asset Assignment History, 32. Asset Maintenance, 3. Common Columns, 42. Settings, 44. Prisma Implementation Guidance (+10 more)
 
 ### Community 13 - "package.json"
-Cohesion: 0.10
-Nodes (20): eslintConfig, name, prisma, seed, private, version, babel-plugin-react-compiler, eslint (+12 more)
+Cohesion: 0.11
+Nodes (18): name, prisma, seed, private, version, babel-plugin-react-compiler, class-variance-authority, prisma (+10 more)
 
 ### Community 14 - "compilerOptions"
 Cohesion: 0.11
@@ -256,9 +231,9 @@ Nodes (18): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModu
 Cohesion: 0.11
 Nodes (16): 10. Application Assignment, 11. Credit Analysis, 12. Survey, 13. Credit Review, 14. Credit Decision, 15. Loan Realization, 22. CMS ERD, 24. Key Relationship Summary (+8 more)
 
-### Community 16 - "UserFormPage.tsx"
-Cohesion: 0.06
-Nodes (21): @base-ui/react, EditUserPage(), metadata, EditableUser, EditUserClient(), metadata, NewUserPage(), EditingUser (+13 more)
+### Community 16 - "dropdown-menu.tsx"
+Cohesion: 0.12
+Nodes (3): @base-ui/react, DropdownMenuContent(), DropdownMenuSubContent()
 
 ### Community 17 - "Prisma Platform core concepts"
 Cohesion: 0.12
@@ -277,8 +252,8 @@ Cohesion: 0.12
 Nodes (15): Branches are preview environments, Environment variables, Failure modes quick reference, Local development, Object storage, Prisma Platform core concepts, Prisma Postgres, Project setup (+7 more)
 
 ### Community 21 - "hero-slides/upload/route.ts"
-Cohesion: 0.20
-Nodes (8): ALLOWED_TYPES, POST(), POST(), GET(), POST(), GET(), getContentType(), normalizeHeroImage()
+Cohesion: 0.17
+Nodes (10): ALLOWED_TYPES, POST(), GET(), getContentType(), HERO_ASPECT_RATIO, HERO_CANVAS_HEIGHT, HERO_CANVAS_WIDTH, HERO_MAX_SUBJECT_WIDTH (+2 more)
 
 ### Community 22 - "Credit Data Database Design"
 Cohesion: 0.13
@@ -325,12 +300,12 @@ Cohesion: 0.18
 Nodes (10): Audit events, Branch/organization scope, Credit Data Permissions, Field-level security, Four-eyes option, Permissions, Purpose, Recommended role policy (+2 more)
 
 ### Community 33 - "dependencies"
-Cohesion: 0.14
-Nodes (14): dependencies, @base-ui/react, class-variance-authority, cn, lucide-react, motion, next, next-auth (+6 more)
+Cohesion: 0.18
+Nodes (11): dependencies, @base-ui/react, class-variance-authority, cn, lucide-react, next, next-auth, react (+3 more)
 
 ### Community 34 - "DashboardShell.tsx"
-Cohesion: 0.16
-Nodes (13): DashboardLayout(), LogoutButton(), Toggle(), toggleVariants, DashboardShell(), MenuVisibility, NavDropdownItem, NavItem (+5 more)
+Cohesion: 0.22
+Nodes (9): DashboardLayout(), LogoutButton(), DashboardShell(), MenuVisibility, NavDropdownItem, NavItem, NavLinkItem, NavSection (+1 more)
 
 ### Community 35 - "39. CMS Tables"
 Cohesion: 0.25
@@ -341,8 +316,8 @@ Cohesion: 0.25
 Nodes (8): 35. MVP Roadmap, Phase 1 - Foundation, Phase 2 - Credit Operations, Phase 3 - Field Operations, Phase 4 - Operational Management, Phase 5 - Management, Phase 6 - Public Website & CMS, Phase 7 - External Integration
 
 ### Community 37 - "app/layout.tsx"
-Cohesion: 0.19
-Nodes (10): next-themes, fraunces, geistMono, geistSans, metadata, poppins, RootLayout(), viewport (+2 more)
+Cohesion: 0.29
+Nodes (4): geistMono, geistSans, metadata, poppins
 
 ### Community 38 - "CSV Data Mapping"
 Cohesion: 0.33
@@ -384,9 +359,9 @@ Nodes (4): 27. Documents, document_types, document_versions, documents
 Cohesion: 0.50
 Nodes (4): 28. Inventory, inventory_categories, inventory_items, inventory_transactions
 
-### Community 49 - "Worst-Case Catalog"
-Cohesion: 0.06
-Nodes (29): Collections, Emails, URLs, identifiers, Environment, Images and media, Labels, titles, and copy from data, Numbers and money, People and names, States (+21 more)
+### Community 49 - "eslint.config.mjs"
+Cohesion: 0.50
+Nodes (3): eslintConfig, eslint, eslint-config-next
 
 ### Community 50 - "BPR Operational Management System"
 Cohesion: 0.50
@@ -448,121 +423,25 @@ Nodes (3): 23. Reporting, Management Reporting, Operational Dashboard
 Cohesion: 0.67
 Nodes (3): 2. Core Architectural Principle, BPR Operational Management System, Existing Core Banking System
 
-### Community 122 - "Animation Recipes"
-Cohesion: 0.05
-Nodes (38): Accordion / collapse, Animation Recipes, Button press, Drag to dismiss, Drawer / sheet, Dropdown, popover, menu, select, Hold to confirm, Masking a crossfade that won't settle (+30 more)
-
-### Community 124 - "Animation Standards Reference"
-Cohesion: 0.07
-Nodes (26): Aggressive Escalation Triggers, Guidelines, Initial Response, Operating Posture, Part 1 — Findings table (REQUIRED), Part 2 — Verdict (REQUIRED), Remedial Preference Hierarchy, Required Output Format (+18 more)
-
-### Community 125 - "Animation Audit Playbook"
-Cohesion: 0.08
-Nodes (22): 1. Purpose & frequency, 2. Easing & duration, 3. Physicality & origin, 4. Interruptibility, 5. Performance, 6. Accessibility, 7. Cohesion & tokens, 8. Missed opportunities (+14 more)
-
-### Community 126 - "Write Swift"
-Cohesion: 0.09
-Nodes (22): 10. ARC and object lifetime, 11. Testing — Swift Testing by default, 12. Macros, 13. Logging and debugging, 14. Unsafe code and interop, 15. Modern syntax you should be using, 16. Migrating an existing codebase to Swift 6, 1. Model data with value types (+14 more)
-
-### Community 127 - "Apple Design"
-Cohesion: 0.09
-Nodes (21): 10. Gesture design details (the "feel" checklist), 11. Frame-level smoothness, 12. Materials & depth — translucency conveys hierarchy, 13. Multimodal feedback — motion + sound + haptics, 14. Reduced motion & accessibility, 15. Typography — optical sizing, tracking, leading, 16. Design foundations — the eight principles, 17. Process (+13 more)
-
-### Community 128 - "The Fixes"
-Cohesion: 0.09
-Nodes (21): 10. Status bar color doesn't match, 11. Right in Chrome, wrong on phone, 1. Hover state stuck after tap, 2. Gray/blue flash on tap, 3. Layout has the wrong height, 4. Page zooms into the input, 5. Tap feels laggy, 6. Pull-to-refresh hijacks scroll (+13 more)
-
-### Community 129 - "Prototyping Variants"
-Cohesion: 0.10
-Nodes (19): Behavior contract, Markup, Reference wiring, Rules, Styles, The Picker, Hard Rules, Initial Response (+11 more)
-
-### Community 130 - "primitives/radix/toggle.tsx"
-Cohesion: 0.13
-Nodes (15): class-variance-authority, motion, radix-ui, ToggleProps, Toggle(), ToggleContextType, ToggleHighlight(), ToggleHighlightProps (+7 more)
-
-### Community 131 - "Glossary"
-Cohesion: 0.11
-Nodes (18): Animation Vocabulary, Easing — how speed changes over an animation, Entrances & Exits — how elements appear and disappear, Examples, Feedback & Interaction — responding to the user's actions, Glossary, Initial Response, Instructions (+10 more)
-
-### Community 132 - "Finding Animation Opportunities"
-Cohesion: 0.12
-Nodes (16): 1. Frequency — how often will a user see this?, 2. Purpose — why does this animate?, 3. Speed — can it stay inside budget?, 4. Function — does motion help or hinder here?, Finding Animation Opportunities, Hard Rules, Initial Response, Operating Posture (+8 more)
-
-### Community 133 - "Find Skills"
-Cohesion: 0.14
-Nodes (13): Common Skill Categories, Find Skills, How to Help Users Find Skills, Step 1: Understand What They Need, Step 2: Check the Leaderboard First, Step 3: Search for Skills, Step 4: Verify Quality Before Recommending, Step 5: Present Options to the User (+5 more)
-
-### Community 134 - "Working With Sonner"
-Cohesion: 0.15
-Nodes (11): Functions, Sonner API Reference, `toast()` options, `<Toaster />`, Initial Response, Picking the right call, Recipes, Setup (+3 more)
-
-### Community 135 - "The list"
-Cohesion: 0.18
-Nodes (10): Charts, Common mismatches to catch, How to use this, Initial Response, Interaction & performance, Motion & visuals, Picking The Right Library, State & styling (+2 more)
-
-### Community 136 - "Design Engineering"
-Cohesion: 0.22
-Nodes (8): Accessibility, Design Engineering, Initial Response, prefers-reduced-motion, Review Checklist, Review Format (Required), Stagger Animations, Touch device hover states
-
-### Community 137 - "Component Building Principles"
-Cohesion: 0.25
-Nodes (8): Animate enter states with @starting-style, Buttons must feel responsive, Component Building Principles, Make popovers origin-aware, Never animate from scale(0), Tooltips: skip delay on subsequent hovers, Use blur to mask imperfect transitions, Use CSS transitions over keyframes for interruptible UI
-
-### Community 138 - "hero-image.ts"
-Cohesion: 0.29
-Nodes (5): HERO_ASPECT_RATIO, HERO_CANVAS_HEIGHT, HERO_CANVAS_WIDTH, HERO_MAX_SUBJECT_WIDTH, HERO_SUBJECT_HEIGHT
-
-### Community 139 - "The Animation Decision Framework"
-Cohesion: 0.33
-Nodes (6): 1. Should this animate at all?, 2. What is the purpose?, 3. What easing should it use?, 4. How fast should it be?, Perceived performance, The Animation Decision Framework
-
-### Community 140 - "Performance Rules"
-Cohesion: 0.33
-Nodes (6): CSS animations beat JS under load, CSS variables are inheritable, Framer Motion hardware acceleration caveat, Only animate transform and opacity, Performance Rules, Use WAAPI for programmatic CSS animations
-
-### Community 141 - "Gesture and Drag Interactions"
-Cohesion: 0.33
-Nodes (6): Damping at boundaries, Friction instead of hard stops, Gesture and Drag Interactions, Momentum-based dismissal, Multi-touch protection, Pointer capture for drag
-
-### Community 142 - "CSS Transform Mastery"
-Cohesion: 0.40
-Nodes (5): 3D transforms for depth, CSS Transform Mastery, scale() scales children too, transform-origin, translateY with percentages
-
-### Community 143 - "The Sonner Principles (Building Loved Components)"
-Cohesion: 0.40
-Nodes (5): Asymmetric enter/exit timing, Cohesion matters, Review your work the next day, The opacity + height combination, The Sonner Principles (Building Loved Components)
-
-### Community 144 - "Spring Animations"
-Cohesion: 0.40
-Nodes (5): Interruptibility advantage, Spring Animations, Spring-based mouse interactions, Spring configuration, When to use springs
-
-### Community 145 - "Core Philosophy"
-Cohesion: 0.50
-Nodes (4): Beauty is leverage, Core Philosophy, Taste is trained, not innate, Unseen details compound
-
-### Community 146 - "Debugging Animations"
-Cohesion: 0.50
-Nodes (4): Debugging Animations, Frame-by-frame inspection, Slow motion testing, Test on real devices
-
 ## Knowledge Gaps
-- **961 isolated node(s):** `$schema`, `style`, `rsc`, `tsx`, `config` (+956 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1078 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **640 isolated node(s):** `$schema`, `style`, `rsc`, `tsx`, `config` (+635 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 751 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **60 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `next` connect `next` to `Button`, `requireAuthAndPermission`, `next-auth`, `permissions.ts`, `package.json`, `UserFormPage.tsx`, `hero-slides/upload/route.ts`, `apply/route.ts`, `DashboardShell.tsx`, `app/layout.tsx`, `posts/route.ts`, `cms/reports/route.ts`, `next.config.ts`, `berita/layout.tsx`, `cms/layout.tsx`, `master-data/layout.tsx`, `roles/layout.tsx`, `users/layout.tsx`, `audit/layout.tsx`, `assets/layout.tsx`, `items/layout.tsx`, `inventory/layout.tsx`, `maintenance/layout.tsx`, `purchasing/layout.tsx`, `orders/layout.tsx`, `receipts/layout.tsx`, `requests/layout.tsx`, `vendors/layout.tsx`, `reports/layout.tsx`, `galeri/layout.tsx`, `laporan/layout.tsx`?**
-  _High betweenness centrality (0.105) - this node is a cross-community bridge._
-- **Why does `react` connect `Button` to `primitives/radix/toggle.tsx`, `DashboardShell.tsx`, `app/layout.tsx`, `package.json`, `UserFormPage.tsx`, `admin/layout.tsx`, `Animation Recipes`?**
-  _High betweenness centrality (0.078) - this node is a cross-community bridge._
+- **Why does `next` connect `next` to `Button`, `extractClientInfo`, `requireAuthAndPermission`, `next-auth`, `permissions.ts`, `package.json`, `hero-slides/upload/route.ts`, `apply/route.ts`, `DashboardShell.tsx`, `app/layout.tsx`, `posts/route.ts`, `cms/reports/route.ts`, `next.config.ts`, `berita/layout.tsx`, `cms/layout.tsx`, `master-data/layout.tsx`, `roles/layout.tsx`, `users/layout.tsx`, `audit/layout.tsx`, `assets/layout.tsx`, `items/layout.tsx`, `inventory/layout.tsx`, `maintenance/layout.tsx`, `purchasing/layout.tsx`, `orders/layout.tsx`, `receipts/layout.tsx`, `requests/layout.tsx`, `vendors/layout.tsx`, `reports/layout.tsx`, `galeri/layout.tsx`, `laporan/layout.tsx`?**
+  _High betweenness centrality (0.145) - this node is a cross-community bridge._
+- **Why does `react` connect `Button` to `DashboardShell.tsx`, `package.json`, `dropdown-menu.tsx`, `admin/layout.tsx`, `useInView.ts`?**
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._
+- **Why does `lucide-react` connect `Button` to `dropdown-menu.tsx`, `DashboardShell.tsx`, `next-auth`, `package.json`?**
+  _High betweenness centrality (0.018) - this node is a cross-community bridge._
 - **What connects `$schema`, `style`, `rsc` to the rest of the system?**
-  _961 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _640 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Button` be split into smaller, more focused modules?**
-  _Cohesion score 0.06832140500482209 - nodes in this community are weakly interconnected._
-- **Should `requireAuthAndPermission` be split into smaller, more focused modules?**
-  _Cohesion score 0.0992063492063492 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05943847072879331 - nodes in this community are weakly interconnected._
+- **Should `extractClientInfo` be split into smaller, more focused modules?**
+  _Cohesion score 0.08590441621294616 - nodes in this community are weakly interconnected._
 - **Should `AI_CODING_AGENT_INSTRUCTIONS.md` be split into smaller, more focused modules?**
   _Cohesion score 0.03636363636363636 - nodes in this community are weakly interconnected._
-- **Should `next-auth` be split into smaller, more focused modules?**
-  _Cohesion score 0.11764705882352941 - nodes in this community are weakly interconnected._

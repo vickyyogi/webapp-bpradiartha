@@ -3,7 +3,6 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { DashboardShell } from "@/components/layouts/DashboardShell";
-import { ThemeToggle } from "@/components/public/ThemeToggle";
 
 export default async function DashboardLayout({
   children,
@@ -136,7 +135,6 @@ export default async function DashboardLayout({
       menuVisibility={menuVisibility}
     >
       {children}
-      <ThemeToggle/>
     </DashboardShell>
   );
 }
