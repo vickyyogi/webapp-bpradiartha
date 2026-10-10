@@ -21,14 +21,15 @@ export function PublicFooter() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-8 pb-12 border-b border-border">
             <div className="space-y-4">
-              <div className="relative h-12 w-56 sm:w-64">
-                <img
-                  src="/logo-arc.png"
+              <div className="relative h-15 w-56 sm:w-64">
+                <div className="flex items-center gap-2">
+                  <img
+                  src="/logo.svg"
                   alt="Logo BPR Adiartha"
-                  
-                  sizes="(max-width: 768px) 224px, 256px"
-                  className="object-contain object-left"
+                  className="max-h-10 w-auto object-contain object-left"
                 />
+                <span className="font-semibold text-primary">BPR Adiartha Reksacitra</span>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 PT BPR Adiartha Utama merupakan lembaga jasa keuangan yang berkomitmen memberdayakan ekonomi masyarakat dan UMKM di Malang Raya.

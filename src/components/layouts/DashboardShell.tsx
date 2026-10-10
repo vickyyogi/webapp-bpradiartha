@@ -196,6 +196,7 @@ export function DashboardShell({
           children: [
             { title: "Pipeline & Analisis", href: "/credit" },
             { title: "Pengajuan Kredit", href: "/credit/applications" },
+            { title: "Analisa SLIK OJK", href: "/credit/slik-analyzer" },
           ],
         },
         {

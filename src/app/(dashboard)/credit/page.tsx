@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CreditCard, FileCheck2, FileText, ClipboardList, CheckCircle2, XCircle, ArrowRight, ShieldCheck, MapPin } from "lucide-react";
+import { CreditCard, FileCheck2, FileScan, FileText, ClipboardList, CheckCircle2, XCircle, ArrowRight, ShieldCheck, MapPin } from "lucide-react";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -95,6 +95,14 @@ export default async function CreditDashboardPage() {
       icon: FileCheck2,
       href: "/credit/applications",
       badge: `${decisionApps} Menunggu Keputusan`,
+    },
+    {
+      title: "Analisa SLIK OJK (IDEB)",
+      description:
+        "Unggah laporan SLIK OJK debitur, ekstrak datanya secara otomatis, lalu cetak laporan Credit Risk Assessment siap komite.",
+      icon: FileScan,
+      href: "/credit/slik-analyzer",
+      badge: "AI Analyzer",
     },
   ];
 

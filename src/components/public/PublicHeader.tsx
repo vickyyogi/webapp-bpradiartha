@@ -87,14 +87,14 @@ export function PublicHeader() {
       <header className="sticky top-0 z-40 safe-top bg-background/95 backdrop-blur border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-20">
           <Link href="/" className="flex items-center gap-3">
-            <div className="relative h-12 w-56 sm:w-64 flex items-center gap-2">
+            <div className="relative h-15 w-56 sm:w-64 flex items-center gap-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/logo.png"
+                src="/logo.svg"
                 alt="Logo BPR Adiartha"
                 className="max-h-10 w-auto object-contain object-left"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = "/logo.png";
+                  (e.target as HTMLImageElement).src = "/logo.png"; // Fallback ke logo default jika gagal memuat
                 }}
               />
               <span className="font-semibold text-primary">BPR Adiartha Reksacitra</span>

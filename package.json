@@ -7,17 +7,21 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma skills sync || exit 0"
+    "postinstall": "prisma skills sync || exit 0",
+    "verify:slik": "ts-node --project scripts/tsconfig.json scripts/verify-slik-logic.ts && ts-node --project scripts/tsconfig.json scripts/verify-slik-report.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.48.0",
     "motion": "^14.0.0",
     "next": "16.3.6",
     "next-auth": "^4.24.15",
     "next-themes": "^0.4.6",
+    "pdf-parse-fork": "^1.2.0",
     "radix-ui": "^1.7.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",

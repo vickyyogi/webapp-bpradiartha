@@ -33,6 +33,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  // pdf-parse-fork memuat mesin pdf.js secara internal (CJS). Jalankan sebagai
+  // paket eksternal di server agar tidak ditransformasi saat build.
+  serverExternalPackages: ["pdf-parse-fork"],
   typescript: {
     ignoreBuildErrors: true,
   },
