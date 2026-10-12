@@ -3,6 +3,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { DashboardShell } from "@/components/layouts/DashboardShell";
+import { roleCodesRequireMfa } from "@/lib/mfa";
 
 export default async function DashboardLayout({
   children,
@@ -47,6 +48,12 @@ export default async function DashboardLayout({
     roleCodes.add(ur.role.code.toUpperCase());
     if (ur.role.name) roleNames.push(ur.role.name);
   });
+
+  // Tahap 1B: peran wajib-MFA (bawaan: ADMIN) harus mendaftarkan TOTP lebih dahulu.
+  // Halaman /mfa/setup berada di luar grup (dashboard) sehingga tidak ikut dialihkan.
+  if (!currentUser.mfaEnabled && roleCodesRequireMfa(roleCodes)) {
+    redirect("/mfa/setup");
+  }
 
   const isSystemAdmin =
     roleCodes.has("SUPER_ADMIN") ||

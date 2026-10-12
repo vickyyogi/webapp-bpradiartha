@@ -1,15 +1,10 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { db } from "@/lib/db";
-import { logAudit } from "@/lib/audit";
-import { burnPasswordTime, hashPassword, validatePasswordPolicy, verifyPassword } from "@/lib/password";
-import {
-  checkLoginIpRate,
-  isAccountLocked,
-  readClientIp,
-  registerFailedLogin,
-  registerSuccessfulLogin,
-} from "@/lib/auth-lockout";
+import { AUTH_AUDIT_NOTES, toNextAuthUser, verifyLoginCredentials, writeLoginAudit } from "@/lib/auth-login";
+import { checkLoginIpRate, readClientIp, registerSuccessfulLogin } from "@/lib/auth-lockout";
+import { consumeChallenge, loadLoginChallenge, registerChallengeFailure, verifySecondFactor } from "@/lib/mfa-service";
+import { MFA_CHALLENGE_MAX_ATTEMPTS } from "@/lib/mfa";
 import {
   SESSION_MAX_AGE_SECONDS,
   SESSION_REVALIDATE_AFTER_SECONDS,
@@ -17,18 +12,23 @@ import {
 } from "@/lib/auth-config";
 
 /**
- * Autentikasi — Tahap 1A (P0.1).
+ * Autentikasi — Tahap 1A & 1B (P0.1).
  *
- * Perubahan dari versi lama (yang membandingkan sandi teks polos):
- * - Sandi diverifikasi dengan bcrypt; nilai lama yang masih teks polos otomatis diganti hash
- *   saat login berhasil (jaring pengaman bila backfill terlewat).
+ * Jalur sandi (Tahap 1A):
+ * - Sandi diverifikasi dengan bcrypt melalui src/lib/auth-login.ts: satu tempat untuk
+ *   seluruh aturan (pembatas laju per IP, penguncian akun, akun nonaktif, akun tanpa
+ *   sandi, peningkatan hash lama). Sandi teks polos tidak pernah dipakai lagi.
  * - Akun dengan passwordHash NULL (mis. pemohon/debitur) tidak dapat login.
- * - Akun nonaktif ditolak SEBELUM sesi dibuat (sebelumnya baru ditolak pada request berikutnya).
  * - Akun terkunci (locked_until) ditolak walau sandinya benar.
- * - Pembatas laju per IP + pencatatan kegagalan berulang per akun.
- * - Sesi berlaku 8 jam dan diperiksa ulang ke database setiap 5 menit, sehingga penonaktifan
- *   akun atau penggantian sandi mencabut sesi yang masih berjalan.
- * - Tidak ada nilai sandi yang pernah ditulis ke console, log, atau audit.
+ * - Sesi berlaku 8 jam dan diperiksa ulang ke database setiap 5 menit, sehingga
+ *   penonaktifan akun atau penggantian sandi mencabut sesi yang masih berjalan.
+ *
+ * Langkah kedua MFA (Tahap 1B) — provider "mfa":
+ * - Provider "credentials" TIDAK membuat sesi bila akun memakai MFA; ia hanya mencatat
+ *   bahwa sandi benar lalu menunggu kode langkah kedua (audit "menunggu kode MFA").
+ * - Sesi hanya terbentuk setelah kode TOTP/kode cadangan diverifikasi pada tantangan
+ *   berumur pendek, sekali pakai, dan dibatasi 5 percobaan.
+ * - Tidak ada nilai sandi maupun kode MFA yang pernah ditulis ke console, log, atau audit.
  */
 
 function readHeaderValue(headers: unknown, name: string): string | null {
@@ -41,19 +41,6 @@ function readHeaderValue(headers: unknown, name: string): string | null {
   return typeof value === "string" ? value : null;
 }
 
-const AUTH_AUDIT_NOTES = {
-  SUCCESS: "Login berhasil",
-  WRONG_PASSWORD: "Login gagal: kata sandi salah",
-  STATIC_DEFAULT: "Login ditolak: akun masih memakai kata sandi default statis",
-  UNKNOWN_EMAIL: "Login gagal: email tidak terdaftar",
-  INACTIVE: "Login ditolak: akun tidak aktif",
-  LOCKED: "Login ditolak: akun terkunci sementara",
-  RATE_LIMITED: "Login ditolak: batas percobaan per IP terlampaui",
-  NO_PASSWORD: "Login ditolak: akun tidak memiliki kata sandi (bukan akun pegawai)",
-  UPGRADED: "Kata sandi ditingkatkan ke hash bcrypt saat login",
-  UPGRADED_WEAK_POLICY: "Kata sandi lama di-hash ulang; wajib diganti (tidak memenuhi kebijakan baru)",
-} as const;
-
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -63,10 +50,31 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials, req) {
-        const email = credentials?.email?.trim().toLowerCase();
-        const password = credentials?.password;
+        const headers = (req as unknown as { headers?: unknown } | undefined)?.headers;
 
-        if (!email || !password) {
+        const outcome = await verifyLoginCredentials({
+          email: credentials?.email,
+          password: credentials?.password,
+          ip: readClientIp(headers),
+          userAgent: readHeaderValue(headers, "user-agent"),
+        });
+
+        // "mfa_required" sengaja TIDAK menghasilkan sesi: langkah kedua MFA wajib dulu.
+        return outcome.status === "ok" ? toNextAuthUser(outcome.user) : null;
+      },
+    }),
+    CredentialsProvider({
+      id: "mfa",
+      name: "MFA",
+      credentials: {
+        challengeToken: { label: "Tantangan", type: "text" },
+        code: { label: "Kode MFA", type: "text" },
+      },
+      async authorize(credentials, req) {
+        const challengeToken = credentials?.challengeToken?.trim();
+        const code = credentials?.code?.trim();
+
+        if (!challengeToken || !code) {
           return null;
         }
 
@@ -74,118 +82,67 @@ export const authOptions: NextAuthOptions = {
         const ip = readClientIp(headers);
         const userAgent = readHeaderValue(headers, "user-agent");
 
-        // Lapis 1: pembatas laju per IP. Diperiksa SEBELUM pencarian akun supaya percobaan
-        // ke email yang tidak terdaftar (penyemprotan/enumerasi) pun ikut dibatasi.
+        // Lapis 1 tetap berlaku pada langkah kedua supaya kode tidak bisa disemprot.
         const ipRate = checkLoginIpRate(ip);
+        if (!ipRate.allowed) {
+          console.warn(`[auth] langkah kedua MFA ditolak: batas percobaan per IP terlampaui — ip=${ip}`);
+          return null;
+        }
+
+        const state = await loadLoginChallenge(challengeToken);
+
+        if (state.status !== "ok") {
+          console.warn(`[auth] langkah kedua MFA ditolak (${state.status}) — ip=${ip}`);
+          return null;
+        }
+
+        const auditUser = { id: state.userId, organizationId: state.organizationId };
+        // Penjaga anti-replay hanya di jalur login (lihat verifySecondFactor).
+        const verification = await verifySecondFactor(state.userId, code, { enforceReplayGuard: true });
+
+        if (!verification.ok) {
+          const attempts = await registerChallengeFailure(state.challengeId);
+          await writeLoginAudit(
+            auditUser,
+            attempts >= MFA_CHALLENGE_MAX_ATTEMPTS ? AUTH_AUDIT_NOTES.MFA_CHALLENGE_LIMIT : AUTH_AUDIT_NOTES.MFA_FAILED,
+            ip,
+            userAgent,
+            { attempts, maxAttempts: MFA_CHALLENGE_MAX_ATTEMPTS }
+          );
+          return null;
+        }
+
+        await consumeChallenge(state.challengeId);
 
         const user = await db.user.findUnique({
-          where: { email },
+          where: { id: state.userId },
           select: {
             id: true,
-            organizationId: true,
             email: true,
             fullName: true,
-            passwordHash: true,
+            organizationId: true,
             isActive: true,
-            failedLoginAttempts: true,
-            lockedUntil: true,
             passwordChangedAt: true,
           },
         });
 
-        // Email tidak terdaftar: tetap habiskan waktu setara verifikasi bcrypt agar
-        // penyerang tidak dapat membedakannya lewat selisih waktu respons.
-        if (!user) {
-          await burnPasswordTime(password);
-          console.warn(
-            `[auth] ${AUTH_AUDIT_NOTES.UNKNOWN_EMAIL} — ip=${ip}${ipRate.allowed ? "" : " (batas per IP terlampaui)"}`
-          );
+        if (!user || !user.isActive) {
+          await writeLoginAudit(auditUser, AUTH_AUDIT_NOTES.INACTIVE, ip, userAgent);
           return null;
-        }
-
-        const writeAudit = (notes: string, extra?: Record<string, unknown>) =>
-          logAudit({
-            organizationId: user.organizationId,
-            userId: user.id,
-            action: "LOGIN",
-            entityType: "USER",
-            entityId: user.id,
-            newValues: extra,
-            ipAddress: ip,
-            userAgent,
-            notes,
-          });
-
-        // Lapis 1 (lanjutan): batas per IP terlampaui => tolak sebelum memeriksa sandi.
-        if (!ipRate.allowed) {
-          await writeAudit(`${AUTH_AUDIT_NOTES.RATE_LIMITED} (retry ${ipRate.retryAfterSeconds}s)`);
-          return null;
-        }
-
-        // Lapis 2: penguncian akun berbasis database.
-        if (isAccountLocked(user)) {
-          await writeAudit(AUTH_AUDIT_NOTES.LOCKED);
-          return null;
-        }
-
-        if (!user.isActive) {
-          await writeAudit(AUTH_AUDIT_NOTES.INACTIVE);
-          return null;
-        }
-
-        // Akun tanpa sandi (catatan pemohon/debitur) tidak pernah bisa login, dan tidak
-        // dihitung sebagai kegagalan sandi karena memang bukan akun pengguna.
-        if (!user.passwordHash) {
-          await burnPasswordTime(password);
-          await writeAudit(AUTH_AUDIT_NOTES.NO_PASSWORD);
-          return null;
-        }
-
-        const verification = await verifyPassword(password, user.passwordHash);
-
-        if (!verification.ok) {
-          const state = await registerFailedLogin(user.id);
-          await writeAudit(
-            verification.reason === "static_default" ? AUTH_AUDIT_NOTES.STATIC_DEFAULT : AUTH_AUDIT_NOTES.WRONG_PASSWORD,
-            { failedLoginAttempts: state.failedLoginAttempts, locked: state.locked }
-          );
-          return null;
-        }
-
-        // Sandi benar. Bila nilai lama masih teks polos (atau hash lama ber-cost rendah),
-        // ganti sekarang juga supaya tidak ada teks polos yang tertinggal.
-        let passwordChangedAt = user.passwordChangedAt;
-        if (verification.needsUpgrade) {
-          const upgraded = await hashPassword(password);
-          const policy = validatePasswordPolicy(password, { email: user.email });
-
-          if (policy.ok) {
-            passwordChangedAt = new Date();
-            await db.user.update({
-              where: { id: user.id },
-              data: { passwordHash: upgraded, passwordChangedAt },
-            });
-            await writeAudit(AUTH_AUDIT_NOTES.UPGRADED);
-          } else {
-            // Tetap di-hash agar tidak ada teks polos tersisa, tetapi pengguna wajib
-            // menggantinya (dicatat untuk tindak lanjut; tidak memblokir login).
-            await db.user.update({
-              where: { id: user.id },
-              data: { passwordHash: upgraded },
-            });
-            await writeAudit(AUTH_AUDIT_NOTES.UPGRADED_WEAK_POLICY);
-          }
         }
 
         await registerSuccessfulLogin(user.id, ip);
-        await writeAudit(AUTH_AUDIT_NOTES.SUCCESS);
+        await writeLoginAudit(auditUser, AUTH_AUDIT_NOTES.MFA_SUCCESS, ip, userAgent, {
+          method: verification.method,
+        });
 
-        return {
+        return toNextAuthUser({
           id: user.id,
+          organizationId: user.organizationId,
           email: user.email,
-          name: user.fullName,
-          passwordChangedAt: passwordChangedAt ? passwordChangedAt.toISOString() : null,
-        };
+          fullName: user.fullName,
+          passwordChangedAt: user.passwordChangedAt,
+        });
       },
     }),
   ],

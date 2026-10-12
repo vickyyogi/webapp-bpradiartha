@@ -15,6 +15,11 @@
  *   # Hanya membuka kunci tanpa mengubah sandi:
  *   npx ts-node --project scripts/tsconfig.json scripts/set-password.ts admin@bpr.com --unlock
  *
+ *   # Menonaktifkan MFA (Tahap 1B) — dipakai bila pengguna kehilangan ponsel
+ *   # authenticator DAN seluruh kode cadangannya, sehingga tidak bisa memenuhi
+ *   # langkah kedua saat login:
+ *   npx ts-node --project scripts/tsconfig.json scripts/set-password.ts admin@bpr.com --reset-mfa
+ *
  * Skrip ini tidak mencetak hash dan tidak menulis sandi ke audit log.
  */
 import { PrismaClient } from "@prisma/client";
@@ -44,8 +49,46 @@ async function main(): Promise<void> {
   }
 
   const unlockOnly = flags.includes("--unlock");
+  const resetMfa = flags.includes("--reset-mfa");
   const generate = flags.includes("--generate");
   const fromEnv = process.env.TARGET_PASSWORD?.trim();
+
+  // Tahap 1B: pemulihan bila pengguna kehilangan perangkat authenticator dan
+  // seluruh kode cadangannya. Menghapus rahasia TOTP + kode cadangan sekaligus.
+  if (resetMfa) {
+    const terdaftar = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: { mfaEnabled: true, organizationId: true },
+    });
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: user.id },
+        data: { mfaEnabled: false, mfaSecret: null, mfaEnrolledAt: null, mfaLastTimeStep: null },
+      }),
+      prisma.mfaBackupCode.deleteMany({ where: { userId: user.id } }),
+      prisma.mfaChallenge.updateMany({ where: { userId: user.id, consumedAt: null }, data: { consumedAt: new Date() } }),
+    ]);
+
+    await prisma.auditLog.create({
+      data: {
+        organizationId: terdaftar.organizationId,
+        userId: user.id,
+        action: "UPDATE",
+        entityType: "USER",
+        entityId: user.id,
+        notes: "MFA dinonaktifkan oleh operator melalui skrip pemulihan (pengguna wajib mendaftar ulang).",
+        newValues: { mfaEnabled: false, sebelum: terdaftar.mfaEnabled },
+      },
+    });
+
+    console.log(
+      `MFA akun ${email} ${terdaftar.mfaEnabled ? "dinonaktifkan" : "memang belum aktif"} + kode cadangan dihapus. ` +
+        "Pengguna wajib mendaftar MFA ulang saat login berikutnya."
+    );
+
+    if (!unlockOnly && !generate && !fromEnv) return;
+  }
 
   if (unlockOnly) {
     await prisma.user.update({

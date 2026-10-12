@@ -1,4 +1,6 @@
-import { db } from "@/lib/db";
+// Impor relatif (bukan alias @/) agar berkas ini juga dapat dimuat oleh skrip
+// verifikasi yang dijalankan dengan ts-node.
+import { db } from "./db";
 import { NextRequest } from "next/server";
 
 export interface LogAuditParams {
