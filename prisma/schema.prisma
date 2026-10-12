@@ -101,6 +101,10 @@ model User {
   phone          String?   @db.VarChar(50)
   isActive       Boolean   @default(true) @map("is_active")
   lastLoginAt    DateTime? @map("last_login_at") @db.Timestamptz
+  // Tahap 1A — P0.1: penguncian akun & pencabutan sesi saat sandi berubah.
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until") @db.Timestamptz
+  passwordChangedAt   DateTime? @map("password_changed_at") @db.Timestamptz
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 

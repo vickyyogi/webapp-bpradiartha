@@ -4,6 +4,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
 import { logAudit, extractClientInfo } from "@/lib/audit";
+import { hashPassword, validatePasswordPolicy } from "@/lib/password";
 
 export async function PUT(
   req: NextRequest,
@@ -32,6 +33,15 @@ export async function PUT(
     const body = await req.json();
     const { email, fullName, password, phone, employeeNumber, branchId, departmentId, isActive, roleIds } = body;
 
+    // Tahap 1A (P0.1): bila sandi diubah, ia wajib memenuhi kebijakan, disimpan sebagai
+    // hash bcrypt, dan waktu perubahan dicatat agar sesi lama dicabut (lihat callback jwt).
+    if (password) {
+      const policy = validatePasswordPolicy(password, { email: email ?? undefined });
+      if (!policy.ok) {
+        return NextResponse.json({ error: policy.message }, { status: 400 });
+      }
+    }
+
     const dataToUpdate = {
       email,
       fullName,
@@ -40,12 +50,10 @@ export async function PUT(
       branchId: branchId || null,
       departmentId: departmentId || null,
       isActive,
+      ...(password
+        ? { passwordHash: await hashPassword(password), passwordChangedAt: new Date() }
+        : {}),
     };
-
-    if (password) {
-      // In production, implement proper password hashing!
-      dataToUpdate.passwordHash = password;
-    }
 
     const user = await db.$transaction(async (tx) => {
       if (roleIds !== undefined) {

@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client'
+// Tahap 1A (P0.1): sandi seed memakai utilitas hashing yang sama dengan aplikasi.
+import { generateRandomPassword, hashPassword, validatePasswordPolicy } from '../src/lib/password'
 
 const prisma = new PrismaClient()
 
@@ -30,12 +32,58 @@ async function main() {
     }
   })
 
+  // Tahap 1A (P0.1): sandi admin TIDAK boleh hard-coded. Ambil dari SEED_ADMIN_PASSWORD;
+  // bila kosong, buat sandi acak sekali pakai dan cetak hanya ke console (tidak disimpan
+  // di repository). Wajib memenuhi kebijakan sandi yang sama seperti aplikasi.
+  //
+  // PENTING (perbaikan pasca-uji): bila SEED_ADMIN_PASSWORD diisi, nilai itu DITERAPKAN
+  // juga pada akun yang sudah ada. Sebelumnya upsert memakai update:{} sehingga mengubah
+  // nilai di .env lalu menjalankan seed ulang tidak berpengaruh sama sekali — console tampak
+  // berhasil padahal sandi tidak berubah. Bila env kosong dan akun sudah ada, seed TIDAK
+  // menyentuh sandi dan mengatakan caranya dengan jelas.
+  const adminEmail = (process.env.SEED_ADMIN_EMAIL?.trim() || 'admin@bpr.com').toLowerCase()
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD?.trim()
+  if (adminPassword) {
+    const policy = validatePasswordPolicy(adminPassword, { email: adminEmail })
+    if (!policy.ok) {
+      throw new Error(`SEED_ADMIN_PASSWORD tidak memenuhi kebijakan: ${policy.message}`)
+    }
+  }
+
+  const adminSebelumnya = await prisma.user.findUnique({
+    where: { email: adminEmail },
+    select: { id: true },
+  })
+
+  let adminPlainPassword: string | null = adminPassword || null
+  if (!adminPlainPassword) {
+    if (adminSebelumnya) {
+      console.log(`[seed] SEED_ADMIN_PASSWORD kosong dan akun ${adminEmail} sudah ada → sandi TIDAK diubah.`)
+      console.log('[seed] Untuk mengganti sandi admin, pilih salah satu:')
+      console.log('[seed]   1) isi SEED_ADMIN_PASSWORD di .env lalu jalankan `npx prisma db seed` lagi, atau')
+      console.log('[seed]   2) jalankan `npm run set-password -- admin@bpr.com --generate`')
+    } else {
+      adminPlainPassword = generateRandomPassword()
+      console.log('[seed] SEED_ADMIN_PASSWORD kosong → membuat sandi admin acak sekali pakai.')
+      console.log(`[seed] SANDI ADMIN SEMENTARA (catat sekarang, hanya ditampilkan sekali): ${adminPlainPassword}`)
+    }
+  }
+
   const adminUser = await prisma.user.upsert({
-    where: { email: 'admin@bpr.com' },
-    update: {},
+    where: { email: adminEmail },
+    update: adminPlainPassword
+      ? {
+          passwordHash: await hashPassword(adminPlainPassword),
+          passwordChangedAt: new Date(),
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+          isActive: true,
+        }
+      : {},
     create: {
-      email: 'admin@bpr.com',
-      passwordHash: 'admin123', // IN PRODUCTION, HASH THIS
+      email: adminEmail,
+      passwordHash: await hashPassword(adminPlainPassword ?? generateRandomPassword()),
+      passwordChangedAt: new Date(),
       fullName: 'Administrator',
       organizationId: org.id,
       branchId: branch?.id,
@@ -46,6 +94,10 @@ async function main() {
       }
     }
   })
+
+  if (adminPassword && adminSebelumnya) {
+    console.log(`[seed] Sandi ${adminEmail} DIPERBARUI sesuai SEED_ADMIN_PASSWORD di .env, dan kuncinya dibuka.`)
+  }
 
   // Seed Sample Leads
   const existingLeads = await prisma.lead.count({ where: { organizationId: org.id } })

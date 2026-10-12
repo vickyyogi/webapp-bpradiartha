@@ -4,6 +4,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
 import { logAudit, extractClientInfo } from "@/lib/audit";
+import { hashPassword, validatePasswordPolicy } from "@/lib/password";
 
 export async function GET() {
   try {
@@ -73,8 +74,12 @@ export async function POST (req: NextRequest) {
       return NextResponse.json({ error: "Email, nama lengkap, dan password wajib diisi" }, { status: 400 });
     }
 
-    // In production, implement proper password hashing!
-    const passwordHash = password;
+    // Tahap 1A (P0.1): sandi wajib memenuhi kebijakan dan selalu disimpan sebagai hash bcrypt.
+    const policy = validatePasswordPolicy(password, { email });
+    if (!policy.ok) {
+      return NextResponse.json({ error: policy.message }, { status: 400 });
+    }
+    const passwordHash = await hashPassword(password);
 
     const user = await db.user.create({
       data: {
@@ -82,6 +87,7 @@ export async function POST (req: NextRequest) {
         email,
         fullName,
         passwordHash,
+        passwordChangedAt: new Date(),
         phone: phone || null,
         employeeNumber: employeeNumber || null,
         branchId: branchId || null,

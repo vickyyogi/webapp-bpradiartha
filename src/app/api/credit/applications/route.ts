@@ -115,9 +115,12 @@ export async function POST (req: NextRequest) {
         ? sanitizeInput(applicantEmail)
         : `debitur.${Date.now()}@bpr-client.internal`;
 
-      // Check if user already exists with email
-      let user = await db.user.findUnique({
-        where: { email: cleanEmail },
+      // Tahap 1A (P0.1): pemohon/debitur BUKAN akun pegawai.
+      // Pencarian dibatasi pada catatan pemohon tanpa sandi (passwordHash null) supaya
+      // tidak pernah mengambil atau menautkan akun pegawai. Tanpa sandi + tidak aktif =
+      // catatan ini tidak dapat dipakai untuk login. Entitas master nasabah menyusul di Tahap 2.
+      let user = await db.user.findFirst({
+        where: { email: cleanEmail, passwordHash: null },
       });
 
       if (!user) {
@@ -128,8 +131,8 @@ export async function POST (req: NextRequest) {
             email: cleanEmail,
             fullName: cleanName,
             phone: cleanPhone,
-            passwordHash: "DEBITUR_DEFAULT_PASS",
-            isActive: true,
+            passwordHash: null,
+            isActive: false,
           },
         });
       }
@@ -142,8 +145,10 @@ export async function POST (req: NextRequest) {
 
       if (lead) {
         const leadEmail = `lead.${lead.id.slice(0, 8)}@bpr-client.internal`;
+        // Tahap 1A (P0.1): hanya cocokkan catatan pemohon tanpa sandi, bukan akun pegawai.
         let user = await db.user.findFirst({
           where: {
+            passwordHash: null,
             OR: [{ email: leadEmail }, { phone: lead.phone || undefined }],
           },
         });
@@ -156,8 +161,8 @@ export async function POST (req: NextRequest) {
               email: leadEmail,
               fullName: lead.name,
               phone: lead.phone,
-              passwordHash: "DEBITUR_DEFAULT_PASS",
-              isActive: true,
+              passwordHash: null,
+              isActive: false,
             },
           });
         }
