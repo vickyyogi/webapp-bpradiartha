@@ -554,16 +554,31 @@ export function slikReportFileName(data: SlikAnalysis): string {
   return `Laporan_Analisa_SLIK_OJK_-_${nama || "Debitur"}.pdf`;
 }
 
-/**
- * Membangun dokumen laporan (2 halaman + halaman lanjutan bila diperlukan).
- */
-export async function buildSlikReportPdf(data: SlikAnalysis): Promise<PdfDoc> {
-  const { jsPDF } = await import("jspdf");
-  const { autoTable } = await import("jspdf-autotable");
+/** Fungsi autoTable yang sudah dimuat (di-import dinamis bersama jsPDF). */
+type AutoTableFn = (doc: PdfDoc, options: object) => void;
 
-  const doc = new jsPDF({ format: "a4", unit: "mm", orientation: "portrait" });
+/** Satu laporan debitur di dalam bundel. */
+export interface SlikReportEntry {
+  fileName: string;
+  data: SlikAnalysis;
+}
+
+/** Sampai halaman ke-`throughPage` milik debitur `owner` (untuk footer per halaman). */
+interface FooterOwner {
+  throughPage: number;
+  owner: string;
+}
+
+/**
+ * Menggambar seluruh isi laporan SATU debitur ke dalam flow yang sudah ada
+ * (halaman 1: identitas & fasilitas; halaman 2: analisis & rekomendasi).
+ *
+ * Tidak memanggil `new jsPDF` maupun `stampFooters`, sehingga bisa dipakai baik
+ * untuk dokumen satu debitur maupun digabungkan beberapa debitur dalam satu berkas.
+ */
+function renderSlikBody(flow: Flow, data: SlikAnalysis, autoTableFn: AutoTableFn): void {
+  const doc = flow.doc;
   const runnerTitle = `Debitur: ${data.data_pribadi.nama_lengkap}`;
-  const flow: Flow = { doc, y: TOP_Y };
 
   /* ================= HALAMAN 1: identitas & fasilitas ================= */
   drawCoverHeader(doc, data);
@@ -572,7 +587,7 @@ export async function buildSlikReportPdf(data: SlikAnalysis): Promise<PdfDoc> {
   drawInfoPanels(flow, data);
 
   sectionHeading(flow, "1. Pengelompokan & Rincian Fasilitas Kredit Debitur", runnerTitle, { spaceBefore: 0 });
-  drawFasilitasTable(flow, data, autoTable as unknown as (doc: PdfDoc, options: object) => void);
+  drawFasilitasTable(flow, data, autoTableFn);
   drawTunggakanBox(flow, data);
 
   /* ================= HALAMAN 2: analisis & rekomendasi ================ */
@@ -714,12 +729,117 @@ export async function buildSlikReportPdf(data: SlikAnalysis): Promise<PdfDoc> {
     titleColor: theme.text,
     items,
   });
+}
 
-  stampFooters(doc, data);
+/**
+ * Membangun dokumen laporan SATU debitur (2 halaman + halaman lanjutan bila perlu).
+ */
+export async function buildSlikReportPdf(data: SlikAnalysis): Promise<PdfDoc> {
+  const { jsPDF } = await import("jspdf");
+  const { autoTable } = await import("jspdf-autotable");
+
+  const doc = new jsPDF({ format: "a4", unit: "mm", orientation: "portrait" });
+  const flow: Flow = { doc, y: TOP_Y };
+
+  renderSlikBody(flow, data, autoTable as unknown as AutoTableFn);
+
+  stampFooters(doc, [{ throughPage: doc.getNumberOfPages(), owner: data.data_pribadi.nama_lengkap }]);
   return doc;
 }
 
-function stampFooters(doc: PdfDoc, data: SlikAnalysis) {
+/** Halaman daftar isi saat satu berkas memuat beberapa laporan debitur. */
+function drawIndexPage(flow: Flow, entries: SlikReportEntry[], autoTableFn: AutoTableFn): void {
+  const doc = flow.doc;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  setColor(doc, NAVY);
+  doc.text("DAFTAR LAPORAN ANALISA SLIK OJK", PAGE_W / 2, 26, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  setColor(doc, MUTED);
+  doc.text(
+    `${entries.length} debitur dalam satu berkas — setiap laporan dimulai pada halaman baru.`,
+    PAGE_W / 2,
+    32,
+    { align: "center" }
+  );
+
+  autoTableFn(doc, {
+    startY: 38,
+    head: [["No", "Nama Debitur", "Nomor Laporan", "Baki Debet", "Rekomendasi", "Risk Rating"]],
+    body: entries.map((entry, index) => [
+      String(index + 1),
+      entry.data.data_pribadi.nama_lengkap || "-",
+      entry.data.header.nomor_laporan || "-",
+      formatRupiah(entry.data.ringkasan_eksposur.total_baki_debet),
+      entry.data.analisis_dan_rekomendasi.keputusan_komite.rekomendasi,
+      entry.data.analisis_dan_rekomendasi.keputusan_komite.risk_rating,
+    ]),
+    styles: { fontSize: 7.5, cellPadding: 1.8, lineColor: BORDER, lineWidth: 0.1, textColor: BODY },
+    headStyles: { fillColor: NAVY, textColor: [255, 255, 255], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: PANEL },
+    margin: { left: MARGIN_X, right: MARGIN_X },
+    theme: "grid",
+  });
+
+  const lastTable = (doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable;
+  const endY = (lastTable?.finalY ?? 60) + 8;
+
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(7.5);
+  setColor(doc, MUTED);
+  doc.text(
+    "Laporan ini dihasilkan otomatis dari analisa dokumen SLIK OJK. Wajib diverifikasi analis kredit sebelum dipakai.",
+    MARGIN_X,
+    Math.min(endY, BOTTOM_LIMIT - 4)
+  );
+
+  flow.y = TOP_Y;
+}
+
+/**
+ * Membangun SATU berkas PDF berisi beberapa laporan debitur (satu laporan per
+ * berkas yang dianalisa), lengkap dengan halaman daftar debitur.
+ */
+export async function buildSlikReportBundlePdf(entries: SlikReportEntry[]): Promise<PdfDoc> {
+  if (entries.length === 0) {
+    throw new Error("Tidak ada laporan yang dapat digabungkan.");
+  }
+
+  // Satu debitur cukup memakai builder biasa (tanpa halaman daftar isi).
+  if (entries.length === 1) {
+    return buildSlikReportPdf(entries[0].data);
+  }
+
+  const { jsPDF } = await import("jspdf");
+  const { autoTable } = await import("jspdf-autotable");
+  const autoTableFn = autoTable as unknown as AutoTableFn;
+
+  const doc = new jsPDF({ format: "a4", unit: "mm", orientation: "portrait" });
+  const flow: Flow = { doc, y: TOP_Y };
+  const owners: FooterOwner[] = [];
+
+  // Halaman 1: daftar debitur.
+  drawIndexPage(flow, entries, autoTableFn);
+  owners.push({ throughPage: doc.getNumberOfPages(), owner: "Daftar Debitur" });
+
+  entries.forEach((entry, index) => {
+    // Laporan pertama tetap boleh memakai halaman kosong pertama; laporan berikutnya
+    // (atau bila sudah ada halaman daftar isi) selalu dimulai di halaman baru.
+    if (index > 0 || owners.length > 0) {
+      addPage(flow);
+    }
+    renderSlikBody(flow, entry.data, autoTableFn);
+    owners.push({ throughPage: doc.getNumberOfPages(), owner: entry.data.data_pribadi.nama_lengkap });
+  });
+
+  stampFooters(doc, owners);
+  return doc;
+}
+
+function stampFooters(doc: PdfDoc, owners: FooterOwner[]) {
   const totalPages = doc.getNumberOfPages();
   for (let page = 1; page <= totalPages; page += 1) {
     doc.setPage(page);
@@ -727,10 +847,18 @@ function stampFooters(doc: PdfDoc, data: SlikAnalysis) {
     doc.setLineWidth(0.2);
     doc.line(MARGIN_X, FOOTER_Y - 4, PAGE_W - MARGIN_X, FOOTER_Y - 4);
 
+    // Nama debitur pada footer mengikuti pemilik halaman tersebut, sehingga satu
+    // berkas bundel tetap jelas siapa debiturnya di tiap halaman.
+    const owner = owners.find((item) => page <= item.throughPage)?.owner ?? "";
+
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     setColor(doc, MUTED);
-    doc.text(`Laporan Analisa SLIK OJK Debitur: ${data.data_pribadi.nama_lengkap}`, MARGIN_X, FOOTER_Y);
+    doc.text(
+      owner === "Daftar Debitur" ? "Daftar Laporan" : `Laporan Analisa SLIK OJK Debitur: ${owner}`,
+      MARGIN_X,
+      FOOTER_Y
+    );
     doc.text(`Halaman ${page} dari ${totalPages}`, PAGE_W - MARGIN_X, FOOTER_Y, { align: "right" });
   }
 }
@@ -739,6 +867,20 @@ function stampFooters(doc: PdfDoc, data: SlikAnalysis) {
 export async function downloadSlikReportPdf(data: SlikAnalysis): Promise<string> {
   const doc = await buildSlikReportPdf(data);
   const fileName = slikReportFileName(data);
+  doc.save(fileName);
+  return fileName;
+}
+
+/** Nama berkas untuk bundel beberapa debitur. */
+export function slikBundleReportFileName(entries: SlikReportEntry[]): string {
+  if (entries.length === 1) return slikReportFileName(entries[0].data);
+  return `Laporan_Analisa_SLIK_OJK_-_${entries.length}_Debitur.pdf`;
+}
+
+/** Membangun lalu mengunduh SATU berkas berisi laporan semua debitur. */
+export async function downloadSlikReportBundlePdf(entries: SlikReportEntry[]): Promise<string> {
+  const doc = await buildSlikReportBundlePdf(entries);
+  const fileName = slikBundleReportFileName(entries);
   doc.save(fileName);
   return fileName;
 }

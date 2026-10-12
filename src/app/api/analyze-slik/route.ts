@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import pdfParse from "pdf-parse-fork";
 import { requireAuthAndPermission } from "@/lib/permissions";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { createSecureErrorResponse } from "@/lib/security";
 import { extractClientInfo, logAudit } from "@/lib/audit";
+import { extractPdfText } from "@/lib/slik/pdfText";
 import {
   analyzeSlikDocuments,
+  analyzeSlikPerDocument,
+  applyTextBudget,
   MAX_PROMPT_DOC_CHARS,
   SlikAnalyzerError,
+  TRUNCATION_MARKER,
+  type SlikDocumentAnalysis,
   type SlikSourceText,
 } from "@/lib/slik/openrouter";
 
@@ -18,6 +22,13 @@ import {
  * lokal (pdf-parse-fork — tidak ada PDF yang dikirim ke pihak ketiga), lalu
  * meminta OpenRouter menyusun ringkasan + rekomendasi komite dalam bentuk JSON.
  * PDF laporan akhir dibuat di sisi klien (src/lib/slik/generateSlikReport.ts).
+ *
+ * Dua mode analisa (field `mode` pada FormData):
+ * - "per-file" (default): satu berkas = satu debitur. Setiap berkas dikirim pada
+ *   panggilan model tersendiri dan menghasilkan JSON serta laporan PDF tersendiri.
+ *   Kegagalan satu berkas tidak menggagalkan berkas lain.
+ * - "merge": seluruh berkas dianggap milik satu debitur, digabung menjadi satu
+ *   prompt → satu JSON → satu laporan.
  */
 
 export const runtime = "nodejs";
@@ -28,8 +39,29 @@ const MAX_FILES = 10;
 const MAX_FILE_BYTES = 15 * 1024 * 1024; // 15 MB per file
 const MAX_TOTAL_BYTES = 40 * 1024 * 1024; // 40 MB per permintaan
 const MIN_TEXT_CHARS = 50;
-/** Batas teks per dokumen sebelum digabung ke prompt. */
+/** Batas teks per dokumen (juga jadi kuota per berkas pada mode per berkas). */
 const MAX_CHARS_PER_DOC = Math.min(MAX_PROMPT_DOC_CHARS, 150_000);
+/** Jumlah berkas yang dianalisa bersamaan pada mode per berkas. */
+const PER_FILE_CONCURRENCY = 3;
+
+type SlikMode = "per-file" | "merge";
+
+/** Status ekstraksi satu berkas — dikirim ke UI agar terlihat berkas mana yang terbaca. */
+interface FileExtractionStatus {
+  index: number;
+  fileName: string;
+  pages: number;
+  chars: number;
+  truncated: boolean;
+  status: "analyzed" | "skipped" | "failed";
+  reason?: string;
+}
+
+/** Berkas yang siap dianalisa (teksnya memadai). */
+interface SlikEntry {
+  index: number;
+  source: SlikSourceText;
+}
 
 function isPdf(file: File): boolean {
   const name = (file.name || "").toLowerCase();
@@ -50,10 +82,13 @@ export async function GET() {
       configured: Boolean(apiKey),
       model: process.env.OPENROUTER_MODEL?.trim() || "qwen/qwen3.7-flash",
       fallbackModel: process.env.OPENROUTER_FALLBACK_MODEL?.trim() || "deepseek/deepseek-v4.1-flash",
+      modes: ["per-file", "merge"],
+      defaultMode: "per-file",
       maxFiles: MAX_FILES,
       maxFileMb: Math.round(MAX_FILE_BYTES / (1024 * 1024)),
       maxTotalMb: Math.round(MAX_TOTAL_BYTES / (1024 * 1024)),
-      maxPromptChars: MAX_PROMPT_DOC_CHARS,
+      maxPerFileChars: MAX_CHARS_PER_DOC,
+      maxTotalMergeChars: MAX_PROMPT_DOC_CHARS,
     },
   });
 }
@@ -74,6 +109,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const rawFiles = formData.getAll("files");
     const files = rawFiles.filter((entry): entry is File => entry instanceof File);
+    const mode: SlikMode = formData.get("mode") === "merge" ? "merge" : "per-file";
 
     if (files.length === 0) {
       return NextResponse.json(
@@ -117,82 +153,210 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Ekstraksi teks lokal per berkas.
+    // 1. Ekstraksi teks lokal per berkas, sekaligus mencatat status tiap berkas
+    //    supaya UI dapat menampilkan berkas mana yang terbaca dan mana yang tidak.
     const warnings: string[] = [];
-    const sources: SlikSourceText[] = [];
+    const entries: SlikEntry[] = [];
+    const fileStatus: FileExtractionStatus[] = [];
 
-    for (const file of files) {
-      const buffer = Buffer.from(await file.arrayBuffer());
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      const rawBytes = await file.arrayBuffer();
 
-      let parsed: Awaited<ReturnType<typeof pdfParse>>;
+      let parsed: { text: string; pages: number; attempts: number };
       try {
-        parsed = await pdfParse(buffer);
+        // Pembacaan berulang di dalam helper: pustaka pdf-parse-fork terbukti gagal
+        // acak pada berkas yang sehat (lihat catatan di src/lib/slik/pdfText.ts).
+        parsed = await extractPdfText(rawBytes);
       } catch (error) {
-        warnings.push(
-          `Berkas "${file.name}" gagal dibaca: ${
-            error instanceof Error ? error.message : "format PDF tidak dikenali"
-          }.`
-        );
+        const reason = `Gagal dibaca: ${
+          error instanceof Error ? error.message : "format PDF tidak dikenali"
+        }`;
+        warnings.push(`Berkas "${file.name}" ${reason.toLowerCase()}.`);
+        fileStatus.push({
+          index,
+          fileName: file.name,
+          pages: 0,
+          chars: 0,
+          truncated: false,
+          status: "failed",
+          reason,
+        });
         continue;
       }
 
-      const text = (parsed.text || "").replace(/\u0000/g, " ").trim();
+      const pages = parsed.pages;
+      const text = parsed.text.replace(/\u0000/g, " ").trim();
+
       if (text.length < MIN_TEXT_CHARS) {
-        warnings.push(
-          `Berkas "${file.name}" hampir tidak mengandung teks (kemungkinan hasil scan/gambar). ` +
-            `Perlu OCR terlebih dahulu agar datanya terbaca.`
-        );
+        const reason = "Hampir tidak mengandung teks (kemungkinan hasil scan/gambar) — perlu OCR";
+        warnings.push(`Berkas "${file.name}": ${reason}.`);
+        fileStatus.push({
+          index,
+          fileName: file.name,
+          pages,
+          chars: text.length,
+          truncated: false,
+          status: "skipped",
+          reason,
+        });
         continue;
       }
 
+      // Batas per berkas: pada mode "merge" ini menjaga agar satu berkas besar tidak
+      // menghabiskan kuota total; pada mode "per-file" ini kuota utama berkas tersebut.
       const truncated = text.length > MAX_CHARS_PER_DOC;
-      sources.push({
+      const source: SlikSourceText = {
         fileName: file.name,
-        pages: parsed.numpages || 0,
-        text: truncated ? `${text.slice(0, MAX_CHARS_PER_DOC)}\n[... teks dipotong ...]` : text,
+        pages,
+        text: truncated ? `${text.slice(0, MAX_CHARS_PER_DOC)}${TRUNCATION_MARKER}` : text,
         truncated,
+      };
+
+      if (truncated) {
+        warnings.push(
+          `Teks berkas "${file.name}" dipotong pada ${MAX_CHARS_PER_DOC.toLocaleString("id-ID")} karakter.`
+        );
+      }
+
+      entries.push({ index, source });
+      fileStatus.push({
+        index,
+        fileName: file.name,
+        pages,
+        chars: source.text.length,
+        truncated,
+        status: "analyzed",
       });
     }
 
-    if (sources.length === 0) {
+    if (entries.length === 0) {
       return NextResponse.json(
         {
           error:
             "Tidak ada teks yang berhasil diekstrak dari berkas yang diunggah. " +
             "Pastikan PDF laporan SLIK OJK memiliki lapisan teks (bukan hasil scan).",
           warnings,
+          meta: { mode, files: fileStatus },
         },
         { status: 422 }
       );
     }
 
-    // 2. Analisa lewat OpenRouter.
-    const result = await analyzeSlikDocuments(sources);
-    result.warnings = [...warnings, ...result.warnings];
-
-    // 3. Jejak audit (mengandung data debitur, jadi hanya ringkasan yang dicatat).
     const { ipAddress, userAgent } = extractClientInfo(req);
+    const startedAt = Date.now();
+
+    // 2a. Mode gabung: seluruh berkas = satu debitur → satu prompt → satu JSON.
+    if (mode === "merge") {
+      // Batas TOTAL teks antar berkas (menghormati SLIK_MAX_DOC_CHARS).
+      const budgeted = applyTextBudget(entries.map((entry) => entry.source));
+      warnings.push(...budgeted.warnings);
+
+      const result = await analyzeSlikDocuments(budgeted.sources);
+      result.warnings = [...warnings, ...result.warnings];
+
+      await logAudit({
+        organizationId: currentUser.organizationId,
+        userId: currentUser.id,
+        action: "CREATE",
+        entityType: "SLIK_ANALYSIS",
+        entityId: result.data.header.nomor_laporan || `SLIK-${Date.now()}`,
+        newValues: {
+          mode,
+          model: result.model,
+          scannedFiles: files.map((file) => file.name),
+          analyzedFiles: budgeted.sources.map((source) => source.fileName),
+          debitur: result.data.data_pribadi.nama_lengkap,
+          rekomendasi: result.data.analisis_dan_rekomendasi.keputusan_komite.rekomendasi,
+          riskRating: result.data.analisis_dan_rekomendasi.keputusan_komite.risk_rating,
+          totalBakiDebet: result.data.ringkasan_eksposur.total_baki_debet,
+        },
+        notes: `Analisa SLIK OJK (mode gabung) memakai model ${result.model} atas ${budgeted.sources.length} berkas PDF.`,
+        ipAddress,
+        userAgent,
+      });
+
+      return NextResponse.json({
+        success: true,
+        mode,
+        data: result.data,
+        meta: { ...result, files: fileStatus },
+      });
+    }
+
+    // 2b. Mode per berkas: satu berkas = satu debitur → panggilan terpisah per berkas.
+    const analyzed = await analyzeSlikPerDocument(
+      entries.map((entry) => entry.source),
+      PER_FILE_CONCURRENCY
+    );
+
+    // Susun ulang mengikuti urutan unggah: berkas yang tidak bisa dianalisa tetap
+    // muncul di daftar sebagai kegagalan, bukan hilang diam-diam.
+    const results: SlikDocumentAnalysis[] = [];
+    let cursor = 0;
+
+    for (const status of fileStatus) {
+      const entry = entries[cursor];
+      if (status.status === "analyzed" && entry && entry.index === status.index) {
+        results.push(analyzed[cursor]);
+        cursor += 1;
+        continue;
+      }
+
+      results.push({
+        fileName: status.fileName,
+        ok: false,
+        data: null,
+        model: null,
+        warnings: [],
+        error: status.reason || "Berkas tidak dapat dianalisa.",
+        elapsedMs: 0,
+        source: {
+          fileName: status.fileName,
+          pages: status.pages,
+          chars: status.chars,
+          truncated: status.truncated,
+        },
+      });
+    }
+
+    const okCount = results.filter((item) => item.ok).length;
+    const failed = results.length - okCount;
+
     await logAudit({
       organizationId: currentUser.organizationId,
       userId: currentUser.id,
       action: "CREATE",
       entityType: "SLIK_ANALYSIS",
-      entityId: result.data.header.nomor_laporan || `SLIK-${Date.now()}`,
+      entityId: `SLIK-BATCH-${Date.now()}`,
       newValues: {
-        model: result.model,
+        mode,
+        debitur: results.filter((item) => item.ok).map((item) => item.data!.data_pribadi.nama_lengkap),
+        rekomendasi: results
+          .filter((item) => item.ok)
+          .map((item) => item.data!.analisis_dan_rekomendasi.keputusan_komite.rekomendasi),
         scannedFiles: files.map((file) => file.name),
-        analyzedFiles: sources.map((source) => source.fileName),
-        debitur: result.data.data_pribadi.nama_lengkap,
-        rekomendasi: result.data.analisis_dan_rekomendasi.keputusan_komite.rekomendasi,
-        riskRating: result.data.analisis_dan_rekomendasi.keputusan_komite.risk_rating,
-        totalBakiDebet: result.data.ringkasan_eksposur.total_baki_debet,
+        analyzedFiles: results.filter((item) => item.ok).map((item) => item.fileName),
+        models: [...new Set(results.filter((item) => item.ok).map((item) => item.model))],
       },
-      notes: `Analisa SLIK OJK memakai model ${result.model} atas ${sources.length} berkas PDF.`,
+      notes: `Analisa SLIK OJK (mode per berkas): ${okCount} berkas berhasil, ${failed} gagal.`,
       ipAddress,
       userAgent,
     });
 
-    return NextResponse.json({ success: true, data: result.data, meta: result });
+    return NextResponse.json({
+      success: true,
+      mode,
+      results,
+      meta: {
+        mode,
+        files: fileStatus,
+        analyzed: okCount,
+        failed,
+        elapsedMs: Date.now() - startedAt,
+        warnings,
+      },
+    });
   } catch (error) {
     if (error instanceof SlikAnalyzerError) {
       return NextResponse.json({ error: error.message, code: error.status }, { status: error.status });

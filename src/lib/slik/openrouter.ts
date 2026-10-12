@@ -4,15 +4,31 @@
  * HANYA dipanggil dari server (API route) — modul ini membaca OPENROUTER_API_KEY
  * dan tidak boleh di-import oleh komponen client.
  */
-import { normalizeSlikAnalysis, type SlikAnalysisResult, type SlikSourceInfo } from "./types";
+import {
+  normalizeSlikAnalysis,
+  type SlikAnalysis,
+  type SlikAnalysisResult,
+  type SlikSourceInfo,
+} from "./types";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const PRIMARY_MODEL = process.env.OPENROUTER_MODEL?.trim() || "qwen/qwen3.7-flash";
 const FALLBACK_MODEL = process.env.OPENROUTER_FALLBACK_MODEL?.trim() || "deepseek/deepseek-v4.1-flash";
-const REQUEST_TIMEOUT_MS = 180_000;
+
+/**
+ * Batas waktu per percobaan model. Default 150 detik supaya model utama + model
+ * cadangan (maksimal 2 percobaan) tetap berada di bawah `maxDuration` route (300 detik).
+ * Uji nyata: prompt ~1 KB perlu ~70 detik, dan prompt mendekati kuota teks bisa
+ * beberapa kali lipat, jadi nilai ini sebaiknya tidak dinaikkan tanpa menaikkan
+ * `maxDuration` juga.
+ */
+const REQUEST_TIMEOUT_MS = Number(process.env.OPENROUTER_TIMEOUT_MS || 150_000);
 
 /** Batas teks gabungan yang dikirim ke model (menjaga biaya & konteks tetap wajar). */
 export const MAX_PROMPT_DOC_CHARS = Number(process.env.SLIK_MAX_DOC_CHARS || 220_000);
+
+/** Sisa kuota di bawah angka ini dianggap tidak berguna lagi untuk sebuah dokumen. */
+export const MIN_CHARS_PER_DOC = 1_000;
 
 export interface SlikSourceText {
   fileName: string;
@@ -105,14 +121,75 @@ ATURAN WAJIB:
 10. risk_rating diisi salah satu: LOW RISK, MEDIUM RISK, HIGH RISK, VERY HIGH RISK.
 11. Seluruh uraian ditulis dalam Bahasa Indonesia profesional dan ringkas.`;
 
+/** Penanda yang ditempel ke teks yang dipotong karena batas kuota. */
+export const TRUNCATION_MARKER = "\n[... teks dipotong ...]";
+
+/**
+ * Menegakkan batas TOTAL karakter teks antar dokumen (bukan hanya per berkas).
+ *
+ * Dokumen diproses sesuai urutan unggah: selama masih ada sisa kuota, teksnya ikut
+ * dikirim (dipotong bila kuota tidak cukup). Dokumen yang tidak kebagian kuota
+ * dilaporkan sebagai peringatan, bukan diam-diam dihilangkan — analis harus tahu
+ * berkas mana yang belum terbaca. Penanda pemotongan dihitung ke dalam kuota,
+ * sehingga total teks yang terkirim tidak pernah melebihi batas.
+ */
+export function applyTextBudget(
+  candidates: SlikSourceText[],
+  totalLimit: number = MAX_PROMPT_DOC_CHARS
+): { sources: SlikSourceText[]; warnings: string[] } {
+  const warnings: string[] = [];
+  const sources: SlikSourceText[] = [];
+  let remaining = Math.max(0, totalLimit);
+  const formatted = totalLimit.toLocaleString("id-ID");
+
+  for (const candidate of candidates) {
+    if (remaining < MIN_CHARS_PER_DOC) {
+      warnings.push(
+        `Berkas "${candidate.fileName}" tidak dianalisa karena batas total teks (${formatted} karakter) ` +
+          `sudah terpakai. Kurangi jumlah berkas atau bagi menjadi beberapa kali analisa.`
+      );
+      continue;
+    }
+
+    if (candidate.text.length <= remaining) {
+      sources.push(candidate);
+      remaining -= candidate.text.length;
+      continue;
+    }
+
+    const keep = Math.max(0, remaining - TRUNCATION_MARKER.length);
+    sources.push({
+      ...candidate,
+      text: `${candidate.text.slice(0, keep)}${TRUNCATION_MARKER}`,
+      truncated: true,
+    });
+    warnings.push(
+      `Teks berkas "${candidate.fileName}" dipotong agar total teks tidak melebihi ${formatted} karakter.`
+    );
+    remaining = 0;
+  }
+
+  return { sources, warnings };
+}
+
 export function buildSlikUserPrompt(sources: SlikSourceText[]): string {
   const parts: string[] = [];
   const totalChars = sources.reduce((sum, s) => sum + s.text.length, 0);
 
-  parts.push(
-    `Berikut ${sources.length} dokumen laporan SLIK OJK (IDEB) debitur yang sama. ` +
-      `Total ${totalChars.toLocaleString("id-ID")} karakter. Ekstrak menjadi satu objek JSON sesuai skema.`
-  );
+  // Mode per berkas: satu dokumen = satu debitur. Mode gabung: beberapa dokumen
+  // diperlakukan sebagai satu debitur, jadi model harus menggabungkan keduanya.
+  if (sources.length === 1) {
+    parts.push(
+      `Berikut satu dokumen laporan SLIK OJK (IDEB) untuk satu debitur. ` +
+        `Total ${totalChars.toLocaleString("id-ID")} karakter. Ekstrak menjadi satu objek JSON sesuai skema.`
+    );
+  } else {
+    parts.push(
+      `Berikut ${sources.length} dokumen laporan SLIK OJK (IDEB) yang semuanya milik SATU debitur yang sama. ` +
+        `Total ${totalChars.toLocaleString("id-ID")} karakter. Gabungkan seluruh dokumen menjadi satu objek JSON ` +
+        `sesuai skema — jangan mengabaikan dokumen mana pun, dan jangan membuat lebih dari satu objek JSON.`
+    );
+  }
 
   sources.forEach((source, index) => {
     parts.push(
@@ -215,7 +292,21 @@ async function callOpenRouter(model: string, userPrompt: string, apiKey: string)
  * Menjalankan analisa: coba model utama, dan bila gagal otomatis pakai model fallback.
  * Hasil JSON dinormalisasi agar selalu aman dirender oleh generator laporan.
  */
-export async function analyzeSlikDocuments(sources: SlikSourceText[]): Promise<SlikAnalysisResult> {
+interface ModelPassResult {
+  data: SlikAnalysis;
+  model: string;
+  warnings: string[];
+  elapsedMs: number;
+}
+
+/**
+ * Satu kali jalan ke model: susun prompt dari `sources`, coba model utama lalu
+ * model cadangan, bersihkan JSON, dan normalisasi hasilnya.
+ *
+ * Dipakai baik oleh mode gabung (satu panggilan untuk semua berkas) maupun mode
+ * per berkas (satu panggilan per berkas).
+ */
+async function runModelPass(sources: SlikSourceText[]): Promise<ModelPassResult> {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) {
     throw new SlikAnalyzerError(
@@ -271,6 +362,12 @@ export async function analyzeSlikDocuments(sources: SlikSourceText[]): Promise<S
   const { data, issues } = normalizeSlikAnalysis(parsed);
   warnings.push(...issues);
 
+  return { data, model: usedModel, warnings, elapsedMs: Date.now() - startedAt };
+}
+
+export async function analyzeSlikDocuments(sources: SlikSourceText[]): Promise<SlikAnalysisResult> {
+  const pass = await runModelPass(sources);
+
   const sourceInfo: SlikSourceInfo[] = sources.map((s) => ({
     fileName: s.fileName,
     pages: s.pages,
@@ -278,11 +375,82 @@ export async function analyzeSlikDocuments(sources: SlikSourceText[]): Promise<S
     truncated: s.truncated,
   }));
 
-  return {
-    data,
-    model: usedModel,
-    warnings,
-    sources: sourceInfo,
-    elapsedMs: Date.now() - startedAt,
+  return { ...pass, sources: sourceInfo };
+}
+
+/** Hasil analisa untuk SATU berkas pada mode per berkas. */
+export interface SlikDocumentAnalysis {
+  fileName: string;
+  /** false bila berkas ini gagal dianalisa (mis. model menolak/mengembalikan JSON rusak). */
+  ok: boolean;
+  data: SlikAnalysis | null;
+  model: string | null;
+  warnings: string[];
+  error: string | null;
+  elapsedMs: number;
+  source: SlikSourceInfo;
+}
+
+/**
+ * Menganalisa setiap berkas SECARA TERPISAH: satu panggilan model per berkas,
+ * satu objek JSON per berkas, satu laporan per debitur.
+ *
+ * Dijalankan dengan kumpulan pekerja terbatas (`concurrency`) supaya beberapa
+ * berkas tidak menghantam OpenRouter sekaligus, dan hasilnya tetap urut sesuai
+ * urutan unggah. Kegagalan satu berkas TIDAK menggagalkan berkas lain — kegagalan
+ * dicatat pada `error` milik berkas tersebut.
+ */
+export async function analyzeSlikPerDocument(
+  sources: SlikSourceText[],
+  concurrency = 3
+): Promise<SlikDocumentAnalysis[]> {
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) {
+    throw new SlikAnalyzerError(
+      "OPENROUTER_API_KEY belum dikonfigurasi. Tambahkan variabel tersebut pada file .env lalu restart server.",
+      500
+    );
+  }
+  if (sources.length === 0) {
+    throw new SlikAnalyzerError("Tidak ada teks dokumen yang dapat dianalisa.", 400);
+  }
+
+  const results: SlikDocumentAnalysis[] = new Array(sources.length);
+  let nextIndex = 0;
+
+  const worker = async () => {
+    for (;;) {
+      const index = nextIndex++;
+      if (index >= sources.length) return;
+
+      const source = sources[index];
+      const sourceInfo: SlikSourceInfo = {
+        fileName: source.fileName,
+        pages: source.pages,
+        chars: source.text.length,
+        truncated: source.truncated,
+      };
+
+      try {
+        const pass = await runModelPass([source]);
+        results[index] = { ...pass, ok: true, error: null, fileName: source.fileName, source: sourceInfo };
+      } catch (error) {
+        results[index] = {
+          fileName: source.fileName,
+          ok: false,
+          data: null,
+          model: null,
+          warnings: [],
+          error: error instanceof Error ? error.message : String(error),
+          elapsedMs: 0,
+          source: sourceInfo,
+        };
+      }
+    }
   };
+
+  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, sources.length)) }, worker);
+  await Promise.all(workers);
+
+  return results;
 }

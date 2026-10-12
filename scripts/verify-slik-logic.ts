@@ -4,7 +4,12 @@
  *
  * Jalankan: npm run verify:slik
  */
-import { extractJsonPayload, buildSlikUserPrompt } from "../src/lib/slik/openrouter";
+import {
+  extractJsonPayload,
+  buildSlikUserPrompt,
+  applyTextBudget,
+  type SlikSourceText,
+} from "../src/lib/slik/openrouter";
 import { normalizeSlikAnalysis, parseNumeric, formatRupiah } from "../src/lib/slik/types";
 
 let failures = 0;
@@ -98,7 +103,66 @@ const empty = normalizeSlikAnalysis("bukan json").data;
 check("input non-objek tidak crash -> nama '-'", empty.data_pribadi.nama_lengkap, "-");
 check("input non-objek -> fasilitas []", empty.fasilitas, []);
 
-/* ---------- prompt builder ---------- */
+/* ---------- applyTextBudget: batas TOTAL teks antar berkas ---------- */
+// Skala angka dibuat realistis (ratusan ribu karakter) karena kuota minimum
+// per dokumen adalah MIN_CHARS_PER_DOC (1.000 karakter).
+const mk = (fileName: string, chars: number): SlikSourceText => ({
+  fileName,
+  pages: 1,
+  text: "x".repeat(chars),
+  truncated: false,
+});
+
+const semuaMuat = applyTextBudget([mk("a.pdf", 50_000), mk("b.pdf", 50_000)], 250_000);
+check("budget: semua berkas muat -> 2 sumber", semuaMuat.sources.length, 2);
+check("budget: semua berkas muat -> tanpa peringatan", semuaMuat.warnings.length, 0);
+check("budget: teks tidak diubah", semuaMuat.sources[1].text.length, 50_000);
+
+const dipotong = applyTextBudget(
+  [mk("a.pdf", 100_000), mk("b.pdf", 100_000), mk("c.pdf", 100_000)],
+  250_000
+);
+check("budget: 3 berkas terkirim dengan kuota 250rb", dipotong.sources.map((s) => s.fileName), [
+  "a.pdf",
+  "b.pdf",
+  "c.pdf",
+]);
+check("budget: berkas pertama utuh", dipotong.sources[0].text.length, 100_000);
+check("budget: berkas terakhir dipotong pas sisa kuota", dipotong.sources[2].text.length, 50_000);
+check("budget: teks terpotong diakhiri penanda", dipotong.sources[2].text.endsWith("[... teks dipotong ...]"), true);
+check("budget: berkas terpotong ditandai", dipotong.sources[2].truncated, true);
+check("budget: peringatan pemotongan tercatat", dipotong.warnings.some((w) => w.includes("c.pdf")), true);
+check(
+  "budget: total teks tidak melebihi batas",
+  dipotong.sources.reduce((n, s) => n + s.text.length, 0) <= 250_000,
+  true
+);
+
+const habis = applyTextBudget([mk("a.pdf", 220_000), mk("b.pdf", 90_000)], 220_000);
+check("budget: kuota habis -> hanya 1 sumber", habis.sources.length, 1);
+check(
+  "budget: berkas tanpa kuota diberi peringatan 'tidak dianalisa'",
+  habis.warnings.some((w) => w.includes("b.pdf") && w.includes("tidak dianalisa")),
+  true
+);
+
+/* ---------- prompt builder: berkas tunggal vs gabungan ---------- */
+{
+  const satu = buildSlikUserPrompt([mk("a.pdf", 100)]);
+  const banyak = buildSlikUserPrompt([mk("a.pdf", 100), mk("b.pdf", 100)]);
+
+  check("prompt 1 berkas menyebut 'satu dokumen'", /satu dokumen/i.test(satu), true);
+  check("prompt 1 berkas tidak menyebut debitur yang sama", !/debitur yang sama/i.test(satu), true);
+  check("prompt gabungan menyebut 'SATU debitur yang sama'", /SATU debitur yang sama/i.test(banyak), true);
+  check("prompt gabungan meminta jangan abaikan dokumen", /jangan mengabaikan dokumen/i.test(banyak), true);
+  check(
+    "prompt gabungan memuat penanda kedua dokumen",
+    banyak.includes("DOKUMEN 1: a.pdf") && banyak.includes("DOKUMEN 2: b.pdf"),
+    true
+  );
+  check("prompt gabungan memuat total karakter", /Total 200 karakter/i.test(banyak), true);
+}
+
 const prompt = buildSlikUserPrompt([
   { fileName: "slik-a.pdf", pages: 3, text: "ISI-A", truncated: false },
   { fileName: "slik-b.pdf", pages: 1, text: "ISI-B", truncated: true },

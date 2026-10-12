@@ -5,11 +5,13 @@
  */
 import * as fs from "fs";
 import * as path from "path";
-import { buildSlikReportPdf, slikReportFileName } from "../src/lib/slik/generateSlikReport";
+import { buildSlikReportPdf, buildSlikReportBundlePdf, slikReportFileName, slikBundleReportFileName, type SlikReportEntry } from "../src/lib/slik/generateSlikReport";
 import { normalizeSlikAnalysis, type SlikAnalysis } from "../src/lib/slik/types";
+import { extractPdfText } from "../src/lib/slik/pdfText";
 
 declare const require: (id: string) => unknown;
-const pdfParse = require("pdf-parse-fork") as (buffer: Buffer) => Promise<{ text: string; numpages: number }>;
+/** Pembacaan ulang memakai helper yang sama dengan API route (sudah tahan gagal acak). */
+const pdfParse = (buffer: Buffer) => extractPdfText(buffer);
 
 /** Potongan API instance jsPDF yang dipakai harness ini. */
 interface PdfPageInfo {
@@ -31,6 +33,9 @@ interface Tracked {
 }
 
 const tracked: Tracked[] = [];
+
+/** Teks yang ditulis di area footer, beserta halaman saat penulisannya. */
+const footerTexts: Array<{ page: number; text: string }> = [];
 
 function track(doc: PdfInstanceLike, y: number, kind: "text" | "rect") {
   const page = doc.getCurrentPageInfo().pageNumber;
@@ -62,6 +67,10 @@ class TrackedJsPDF extends RealJsPDF {
       const rawY = callArgs[2];
       const y = typeof rawY === "number" ? rawY : Array.isArray(rawY) ? Math.max(...(rawY as number[])) : 0;
       track(this, y, "text");
+      // Footer digambar di y > 285 mm; catat teksnya untuk memeriksa kepemilikan halaman.
+      if (y > 285 && typeof callArgs[0] === "string") {
+        footerTexts.push({ page: this.getCurrentPageInfo().pageNumber, text: callArgs[0] });
+      }
       return originalText(...callArgs);
     };
     const originalRect = this.rect.bind(this);
@@ -257,7 +266,7 @@ async function run(label: string, data: SlikAnalysis) {
   const extracted = await pdfParse(buffer);
   const text = extracted.text.replace(/\s+/g, " ");
   const expectations: Array<[string, boolean]> = [
-    ["jumlah halaman terbaca ulang", extracted.numpages === pages],
+    ["jumlah halaman terbaca ulang", extracted.pages === pages],
     ["nomor laporan muncul", text.includes(data.header.nomor_laporan)],
     ["nama debitur muncul", text.includes(data.data_pribadi.nama_lengkap.slice(0, 25))],
     ["judul CREDIT RISK ASSESSMENT", text.includes("CREDIT RISK ASSESSMENT")],
@@ -286,9 +295,123 @@ async function run(label: string, data: SlikAnalysis) {
   return outPath;
 }
 
+/**
+ * Skenario bundel: satu berkas PDF memuat beberapa laporan debitur (mode per berkas
+ * di UI). Memastikan jumlah halaman = 1 (daftar debitur) + jumlah halaman tiap
+ * laporan, footer menyebut debitur yang benar di tiap halaman, dan tidak ada
+ * konten yang melampaui area isi.
+ */
+async function runBundle(label: string, entries: SlikReportEntry[]) {
+  // Jumlah halaman tiap laporan bila dibuat terpisah — dipakai sebagai acuan.
+  const singlePages: number[] = [];
+  for (const entry of entries) {
+    const single = await buildSlikReportPdf(entry.data);
+    singlePages.push(single.getNumberOfPages());
+  }
+
+  tracked.length = 0;
+  footerTexts.length = 0;
+
+  const doc = await buildSlikReportBundlePdf(entries);
+  const pages = doc.getNumberOfPages();
+  const outDir = process.env.OUT_DIR || ".";
+  const outPath = path.join(outDir, slikBundleReportFileName(entries));
+  const buffer = Buffer.from(doc.output("arraybuffer") as ArrayBuffer);
+  fs.writeFileSync(outPath, buffer);
+
+  const expectedPages = 1 + singlePages.reduce((sum, value) => sum + value, 0);
+  const bodyYs = tracked.flatMap((t) => t.textYs).filter((y) => y <= 285);
+  const worstBody = bodyYs.length > 0 ? Math.max(...bodyYs) : 0;
+  const worstRect = Math.max(...tracked.map((t) => t.maxRectY));
+
+  // Footer tiap halaman: halaman 1 = daftar debitur, sisanya harus menyebut
+  // debitur pemilik halaman tersebut sesuai urutan. Satu halaman punya dua teks
+  // footer (nama debitur di kiri, nomor halaman di kanan), jadi keduanya digabung.
+  const footerByPage = new Map<number, string>();
+  for (const item of footerTexts) {
+    footerByPage.set(item.page, `${footerByPage.get(item.page) ?? ""} ${item.text}`.trim());
+  }
+
+  const expectedOwners: string[] = ["Daftar Laporan"];
+  entries.forEach((entry, index) => {
+    for (let i = 0; i < singlePages[index]; i += 1) {
+      expectedOwners.push(entry.data.data_pribadi.nama_lengkap);
+    }
+  });
+
+  const ownerChecks = expectedOwners.map((owner, index) => {
+    const footer = footerByPage.get(index + 1) ?? "";
+    return footer.includes(owner);
+  });
+
+  const extracted = await pdfParse(buffer);
+  const text = extracted.text.replace(/\s+/g, " ");
+
+  console.log(`\n=== ${label} ===`);
+  console.log(`file         : ${outPath} (${(buffer.byteLength / 1024).toFixed(0)} KB)`);
+  console.log(`halaman      : ${pages} (diharapkan ${expectedPages} = 1 daftar + ${singlePages.join(" + ")})`);
+  console.log(`maxY isi     : ${worstBody.toFixed(2)} mm  (batas 282 mm)`);
+  console.log(`maxY kotak   : ${worstRect.toFixed(2)} mm  (batas halaman 297 mm)`);
+
+  const expectations: Array<[string, boolean]> = [
+    ["jumlah halaman = daftar + semua laporan", pages === expectedPages],
+    ["jumlah halaman terbaca ulang sama", extracted.pages === pages],
+    ["halaman daftar debitur ada", /DAFTAR LAPORAN ANALISA SLIK OJK/i.test(text)],
+    ["setiap debitur disebut di footer halamannya", ownerChecks.every(Boolean)],
+    ["nomor halaman dinamis", new RegExp(`Halaman ${pages} dari ${pages}`).test(text)],
+    ["tidak ada konten melewati area isi", worstBody <= 282.01 && worstRect <= 292],
+    ...entries.map(
+      (entry, index): [string, boolean] => [
+        `laporan ${index + 1} (${entry.data.data_pribadi.nama_lengkap}) tercetak`,
+        text.includes(entry.data.data_pribadi.nama_lengkap.slice(0, 25)) &&
+          text.includes(entry.data.header.nomor_laporan),
+      ]
+    ),
+  ];
+
+  for (const [name, ok] of expectations) {
+    console.log(`  ${ok ? "OK  " : "GAGAL"} ${name}`);
+  }
+  if (footerByPage.size > 0) {
+    console.log(
+      `  footer/hal  : ${[...footerByPage.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([page, value]) => `p${page}=${value.replace(/Laporan Analisa SLIK OJK Debitur: /, "").slice(0, 18)}`)
+        .join(" | ")}`
+    );
+  }
+
+  const failed = expectations.filter(([, ok]) => !ok).map(([name]) => name);
+  if (failed.length > 0) {
+    console.log(`HASIL: GAGAL -> ${failed.join("; ")}`);
+    process.exitCode = 1;
+  } else {
+    console.log("HASIL: OK (bundel multi-debitur: halaman, footer, dan tata letak sesuai)");
+  }
+  return outPath;
+}
+
 async function main() {
   await run("DATA NORMAL", buildSample());
   await run("DATA STRESS (34 fasilitas, uraian panjang)", buildStress());
+
+  // Bundel 3 debitur (mode "pisah per berkas") — salah satunya data stress agar
+  // laporan panjang ikut diuji di dalam satu berkas.
+  const debiturs: SlikReportEntry[] = [
+    { fileName: "slik-debitur-1.pdf", data: buildSample() },
+    {
+      fileName: "slik-debitur-2.pdf",
+      data: { ...buildSample(), data_pribadi: { ...buildSample().data_pribadi, nama_lengkap: "Ni Made Ayu Lestari Dewi" } },
+    },
+    {
+      fileName: "slik-debitur-3.pdf",
+      data: {
+        ...buildStress(),
+        data_pribadi: { ...buildStress().data_pribadi, nama_lengkap: "I Kadek Bagus Pramana Yudha" },
+      },
+    },
+  ];
+  await runBundle("BUNDEL 3 DEBITUR (satu berkas, mode pisah per berkas)", debiturs);
 }
 
 main().catch((error) => {

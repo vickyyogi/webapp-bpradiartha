@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma skills sync || exit 0",
-    "verify:slik": "ts-node --project scripts/tsconfig.json scripts/verify-slik-logic.ts && ts-node --project scripts/tsconfig.json scripts/verify-slik-report.ts"
+    "verify:slik": "ts-node --project scripts/tsconfig.json scripts/verify-slik-logic.ts && ts-node --project scripts/tsconfig.json scripts/verify-slik-report.ts",
+    "verify:slik:live": "ts-node --project scripts/tsconfig.json scripts/verify-slik-openrouter.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
