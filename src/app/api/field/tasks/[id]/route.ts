@@ -1,28 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma, FieldTaskPriority, FieldTaskStatus, FieldTaskType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission, requireAnyPermission } from "@/lib/permissions";
-import { FieldTaskPriority, FieldTaskStatus, FieldTaskType } from "@prisma/client";
+import { buildScopeFilter, isBranchAllowed, toScopeUser } from "@/lib/access-scope";
+
+const FIELD_ASSIGNMENT_FIELDS = ["assignedOfficerId"];
+
+function scopedWhere(scopeUser: ReturnType<typeof toScopeUser>, id: string): Prisma.FieldTaskWhereInput {
+  return {
+    id,
+    ...(buildScopeFilter(scopeUser, { assignmentFields: FIELD_ASSIGNMENT_FIELDS }) as Prisma.FieldTaskWhereInput),
+  };
+}
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAnyPermission(["credit.survey.view", "field.task.view"]);
     if (!authCheck.authorized) {
       return authCheck.response;
     }
+    const scopeUser = toScopeUser(authCheck.user!);
 
     const { id } = await params;
-    const task = await db.fieldTask.findUnique({
-      where: { id },
+    const task = await db.fieldTask.findFirst({
+      where: scopedWhere(scopeUser, id),
       include: {
         assignedOfficer: { select: { id: true, fullName: true, email: true, phone: true } },
         branch: { select: { id: true, name: true, code: true } },
@@ -47,17 +51,19 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("field.task.update");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
+    const currentUser = authCheck.user!;
+    const scopeUser = toScopeUser(currentUser);
 
     const { id } = await params;
+    const existing = await db.fieldTask.findFirst({ where: scopedWhere(scopeUser, id), select: { id: true } });
+    if (!existing) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
     const body = await req.json();
     const {
       title,
@@ -73,7 +79,20 @@ export async function PUT(
       resultNotes,
     } = body;
 
-    const updateData = {};
+    if (assignedOfficerId !== undefined && assignedOfficerId) {
+      const assignee = await db.user.findFirst({
+        where: { id: assignedOfficerId, organizationId: currentUser.organizationId, isActive: true },
+        select: { branchId: true },
+      });
+      if (!assignee) {
+        return NextResponse.json({ error: "Petugas yang ditugaskan tidak ditemukan.", code: "ASSIGNEE_FORBIDDEN" }, { status: 403 });
+      }
+      if (!isBranchAllowed(scopeUser, assignee.branchId)) {
+        return NextResponse.json({ error: "Petugas yang ditugaskan berada di luar cabang Anda.", code: "ASSIGNEE_FORBIDDEN" }, { status: 403 });
+      }
+    }
+
+    const updateData: Prisma.FieldTaskUncheckedUpdateInput = {};
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
     if (taskType !== undefined && Object.values(FieldTaskType).includes(taskType as FieldTaskType)) {
@@ -117,20 +136,19 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAnyPermission(["field.task.update"]);
     if (!authCheck.authorized) {
       return authCheck.response;
     }
+    const scopeUser = toScopeUser(authCheck.user!);
 
     const { id } = await params;
-    await db.fieldTask.delete({
-      where: { id },
-    });
+    const existing = await db.fieldTask.findFirst({ where: scopedWhere(scopeUser, id), select: { id: true } });
+    if (!existing) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    await db.fieldTask.delete({ where: { id } });
 
     return NextResponse.json({ success: true, message: "Task deleted successfully" });
   } catch (error) {

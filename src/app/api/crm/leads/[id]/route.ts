@@ -3,7 +3,12 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission, requireAnyPermission } from "@/lib/permissions";
-import { LeadStatus } from "@prisma/client";
+import { Prisma, LeadStatus } from "@prisma/client";
+import { buildScopeFilter, toScopeUser } from "@/lib/access-scope";
+
+const LEAD_ASSIGNMENT_FIELDS = ["assignedOfficerId"];
+const leadScope = (user: Parameters<typeof toScopeUser>[0]) =>
+  buildScopeFilter(toScopeUser(user), { assignmentFields: LEAD_ASSIGNMENT_FIELDS }) as Prisma.LeadWhereInput;
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -22,8 +27,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = await params;
-    const lead = await db.lead.findUnique({
-      where: { id },
+    const lead = await db.lead.findFirst({
+      where: { id, ...leadScope(authCheck.user!) },
       include: {
         branch: { select: { id: true, name: true, code: true } },
         assignedOfficer: { select: { id: true, fullName: true, email: true } },
@@ -59,7 +64,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const body = await req.json();
 
-    const existingLead = await db.lead.findUnique({ where: { id } });
+    const existingLead = await db.lead.findFirst({ where: { id, ...leadScope(authCheck.user!) } });
     if (!existingLead) {
       return NextResponse.json({ error: "Lead tidak ditemukan" }, { status: 404 });
     }
@@ -76,7 +81,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       notes,
     } = body;
 
-    const dataToUpdate = {};
+    const dataToUpdate: Prisma.LeadUncheckedUpdateInput = {};
     if (name !== undefined) dataToUpdate.name = name.trim();
     if (phone !== undefined) dataToUpdate.phone = phone ? phone.trim() : null;
     if (address !== undefined) dataToUpdate.address = address ? address.trim() : null;
@@ -125,7 +130,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = await params;
-    const existingLead = await db.lead.findUnique({ where: { id } });
+    const existingLead = await db.lead.findFirst({ where: { id, ...leadScope(authCheck.user!) } });
     if (!existingLead) {
       return NextResponse.json({ error: "Lead tidak ditemukan" }, { status: 404 });
     }

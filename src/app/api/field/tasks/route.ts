@@ -1,29 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma, FieldTaskPriority, FieldTaskStatus, FieldTaskType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
-import { FieldTaskPriority, FieldTaskStatus, FieldTaskType } from "@prisma/client";
+import { buildScopeFilter, isBranchAllowed, toScopeUser } from "@/lib/access-scope";
+
+const FIELD_ASSIGNMENT_FIELDS = ["assignedOfficerId"];
+
+async function ensureAssignable(
+  organizationId: string,
+  branchAllowed: (branchId?: string | null) => boolean,
+  assigneeId: string | null | undefined
+): Promise<string | null> {
+  if (!assigneeId) return null;
+  const assignee = await db.user.findFirst({
+    where: { id: assigneeId, organizationId, isActive: true },
+    select: { id: true, branchId: true },
+  });
+  if (!assignee) return "Petugas yang ditugaskan tidak ditemukan pada organisasi Anda.";
+  if (!branchAllowed(assignee.branchId)) return "Petugas yang ditugaskan berada di luar cabang Anda.";
+  return null;
+}
 
 export async function GET (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("field.task.view");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
-
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const scopeUser = toScopeUser(authCheck.user!);
 
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
@@ -31,22 +35,19 @@ export async function GET (req: NextRequest) {
     const officerId = searchParams.get("officerId");
     const search = searchParams.get("search");
 
-    const whereClause = {
-      organizationId: currentUser.organizationId,
+    const whereClause: Prisma.FieldTaskWhereInput = {
+      ...(buildScopeFilter(scopeUser, { assignmentFields: FIELD_ASSIGNMENT_FIELDS }) as Prisma.FieldTaskWhereInput),
     };
 
     if (status && Object.values(FieldTaskStatus).includes(status as FieldTaskStatus)) {
       whereClause.status = status as FieldTaskStatus;
     }
-
     if (taskType && Object.values(FieldTaskType).includes(taskType as FieldTaskType)) {
       whereClause.taskType = taskType as FieldTaskType;
     }
-
     if (officerId) {
       whereClause.assignedOfficerId = officerId;
     }
-
     if (search) {
       whereClause.OR = [
         { title: { contains: search, mode: "insensitive" } },
@@ -76,23 +77,12 @@ export async function GET (req: NextRequest) {
 
 export async function POST (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("field.task.create");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
-
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const currentUser = authCheck.user!;
+    const scopeUser = toScopeUser(currentUser);
 
     const body = await req.json();
     const {
@@ -109,6 +99,18 @@ export async function POST (req: NextRequest) {
       creditApplicationId,
       leadId,
     } = body;
+
+    if (branchId && !isBranchAllowed(scopeUser, branchId)) {
+      return NextResponse.json(
+        { error: "Anda tidak berwenang membuat tugas pada cabang tersebut.", code: "BRANCH_FORBIDDEN" },
+        { status: 403 }
+      );
+    }
+
+    const assigneeErr = await ensureAssignable(currentUser.organizationId, (b) => isBranchAllowed(scopeUser, b), assignedOfficerId);
+    if (assigneeErr) {
+      return NextResponse.json({ error: assigneeErr, code: "ASSIGNEE_FORBIDDEN" }, { status: 403 });
+    }
 
     const newTask = await db.fieldTask.create({
       data: {

@@ -15,6 +15,7 @@ export interface SessionUser {
   organizationId: string;
   fullName: string;
   mfaEnabled: boolean;
+  mustChangePassword: boolean;
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {
@@ -25,7 +26,15 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   const user = await db.user.findUnique({
     where: { email },
-    select: { id: true, email: true, organizationId: true, fullName: true, isActive: true, mfaEnabled: true },
+    select: {
+      id: true,
+      email: true,
+      organizationId: true,
+      fullName: true,
+      isActive: true,
+      mfaEnabled: true,
+      mustChangePassword: true,
+    },
   });
 
   if (!user || !user.isActive) return null;
@@ -36,5 +45,6 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     organizationId: user.organizationId,
     fullName: user.fullName,
     mfaEnabled: user.mfaEnabled,
+    mustChangePassword: user.mustChangePassword,
   };
 }

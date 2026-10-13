@@ -55,6 +55,12 @@ export default async function DashboardLayout({
     redirect("/mfa/setup");
   }
 
+  // Tahap 1B-3: sandi lama yang tidak memenuhi kebijakan wajib diganti dahulu.
+  // Halaman /account/password berada di luar grup (dashboard) sehingga tidak ikut dialihkan.
+  if (currentUser.mustChangePassword) {
+    redirect("/account/password");
+  }
+
   const isSystemAdmin =
     roleCodes.has("SUPER_ADMIN") ||
     roleCodes.has("ADMIN_OPERASIONAL") ||

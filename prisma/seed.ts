@@ -146,15 +146,65 @@ async function main() {
   }
 
   // Seed sample credit applications
+  // Tahap 2A (P0.2): pengajuan kredit merujuk ke entitas Nasabah/Debitur (Customer),
+  // bukan ke akun pegawai. Sample nasabah dibuat terpisah dari admin.
   const existingAppCount = await prisma.creditApplication.count()
   if (existingAppCount === 0) {
+    const customerBudi = await prisma.customer.create({
+      data: {
+        organizationId: org.id,
+        branchId: branch?.id,
+        customerNumber: 'CUST-2026-0001',
+        customerType: 'INDIVIDU',
+        status: 'AKTIF',
+        legalName: 'Budi Santoso',
+        identityType: 'KTP',
+        identityNumber: '3171012345678901',
+        phone: '081234567890',
+        address: 'Jl. Merdeka No. 45, Denpasar',
+        occupation: 'Pemilik Toko Sembako',
+        createdById: adminUser.id,
+      },
+    })
+    const customerWayan = await prisma.customer.create({
+      data: {
+        organizationId: org.id,
+        branchId: branch?.id,
+        customerNumber: 'CUST-2026-0002',
+        customerType: 'INDIVIDU',
+        status: 'AKTIF',
+        legalName: 'Ni Wayan Sari',
+        identityType: 'KTP',
+        identityNumber: '5171012345678902',
+        phone: '085798765432',
+        address: 'Jl. Gatot Subroto No. 12, Tabanan',
+        createdById: adminUser.id,
+      },
+    })
+    const customerSudirga = await prisma.customer.create({
+      data: {
+        organizationId: org.id,
+        branchId: branch?.id,
+        customerNumber: 'CUST-2026-0003',
+        customerType: 'INDIVIDU',
+        status: 'AKTIF',
+        legalName: 'I Made Sudirga',
+        identityType: 'KTP',
+        identityNumber: '5171012345678903',
+        phone: '087811223344',
+        address: 'Jl. Sunset Road No. 88, Badung',
+        occupation: 'Pemilik Penginapan',
+        createdById: adminUser.id,
+      },
+    })
+
     await prisma.creditApplication.createMany({
       data: [
         {
           organizationId: org.id,
           branchId: branch?.id,
           applicationNumber: 'KRD-2026-0001',
-          applicantId: adminUser.id,
+          customerId: customerBudi.id,
           product: 'Kredit Modal Kerja',
           requestedAmount: 50000000,
           requestedTenorMonths: 24,
@@ -169,7 +219,7 @@ async function main() {
           organizationId: org.id,
           branchId: branch?.id,
           applicationNumber: 'KRD-2026-0002',
-          applicantId: adminUser.id,
+          customerId: customerWayan.id,
           product: 'Kredit Multi Guna',
           requestedAmount: 150000000,
           requestedTenorMonths: 36,
@@ -185,7 +235,7 @@ async function main() {
           organizationId: org.id,
           branchId: branch?.id,
           applicationNumber: 'KRD-2026-0003',
-          applicantId: adminUser.id,
+          customerId: customerSudirga.id,
           product: 'Kredit Investasi Usaha',
           requestedAmount: 300000000,
           requestedTenorMonths: 60,
@@ -200,7 +250,7 @@ async function main() {
         }
       ]
     })
-    console.log('Sample credit applications seeded successfully.')
+    console.log('Sample customers & credit applications seeded successfully.')
   }
 
   // Seed BPR Roles
@@ -886,7 +936,7 @@ async function main() {
             applicationNumber: 'APP-2026-0001',
             requestedAmount: 50000000,
             product: 'Kredit Modal Kerja',
-            applicant: 'Budi Santoso',
+            customer: 'Budi Santoso',
           },
           ipAddress: '192.168.1.10',
           notes: 'Pendaftaran permohonan kredit baru',

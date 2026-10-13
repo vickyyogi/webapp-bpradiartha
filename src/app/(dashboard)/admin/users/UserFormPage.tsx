@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft } from "lucide-react";
+import { PasswordPolicyChecklist } from "@/components/account/PasswordPolicyChecklist";
 
 type Option = { id: string; name: string };
 
@@ -209,6 +210,10 @@ export function UserFormPage({
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   required={!editingUser}
                 />
+                <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold text-foreground">Kebijakan kata sandi (ditegakkan server)</p>
+                  <PasswordPolicyChecklist sandi={formData.password} />
+                </div>
               </div>
 
               <div className="space-y-2">

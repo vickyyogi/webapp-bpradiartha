@@ -4,6 +4,8 @@ import { CreditCard, FileCheck2, FileScan, FileText, ClipboardList, CheckCircle2
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma } from "@prisma/client";
+import { buildScopeFilter, toScopeUser } from "@/lib/access-scope";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Metadata } from "next";
@@ -18,9 +20,14 @@ export default async function CreditDashboardPage() {
   const session = await getServerSession(authOptions);
   const currentUser = await db.user.findUnique({
     where: { email: session?.user?.email || "" },
+    include: { userRoles: { include: { role: true } } },
   });
 
-  const orgFilter = currentUser?.organizationId ? { organizationId: currentUser.organizationId } : {};
+  const orgFilter = currentUser
+    ? (buildScopeFilter(toScopeUser(currentUser), {
+        assignmentFields: ["assignedMarketingOfficerId", "assignedAnalystId", "assignedSurveyOfficerId", "decisionMakerId"],
+      }) as Prisma.CreditApplicationWhereInput)
+    : { organizationId: "__none__" };
 
   const [
     totalApps,
@@ -58,7 +65,7 @@ export default async function CreditDashboardPage() {
     db.creditApplication.findMany({
       where: orgFilter,
       include: {
-        applicant: { select: { fullName: true } },
+        customer: { select: { legalName: true } },
         branch: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -232,7 +239,7 @@ export default async function CreditDashboardPage() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Pemohon: <span className="font-medium text-foreground">{app.applicant.fullName}</span> • Kantor: {app.branch?.name || "-"}
+                      Pemohon: <span className="font-medium text-foreground">{app.customer?.legalName || "-"}</span> • Kantor: {app.branch?.name || "-"}
                     </p>
                   </div>
                   <div className="text-right space-y-1">

@@ -170,7 +170,12 @@ export async function verifyLoginCredentials(input: VerifyLoginInput): Promise<L
       });
       await writeLoginAudit(auditUser, AUTH_AUDIT_NOTES.UPGRADED, ip, userAgent);
     } else {
-      await db.user.update({ where: { id: user.id }, data: { passwordHash: upgraded } });
+      // Tahap 1B-3: sandi lama yang tidak memenuhi kebijakan baru tetap di-hash,
+      // tetapi akun ditandai wajib menggantinya sebelum memakai aplikasi.
+      await db.user.update({
+        where: { id: user.id },
+        data: { passwordHash: upgraded, mustChangePassword: true },
+      });
       await writeLoginAudit(auditUser, AUTH_AUDIT_NOTES.UPGRADED_WEAK_POLICY, ip, userAgent);
     }
   }

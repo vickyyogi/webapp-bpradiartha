@@ -1,37 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma, PurchaseOrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
-import { PurchaseOrderStatus } from "@prisma/client";
+import { buildScopeFilter, toScopeUser } from "@/lib/access-scope";
+
+const poScope = (user: Parameters<typeof toScopeUser>[0]) =>
+  buildScopeFilter(toScopeUser(user), { assignmentFields: ["createdById"] }) as Prisma.PurchaseOrderWhereInput;
 
 export async function GET (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("purchase.order.view");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
-
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const currentUser = authCheck.user!;
 
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search");
     const status = searchParams.get("status");
     const vendorId = searchParams.get("vendorId");
 
-    const whereClause = {
-      organizationId: currentUser.organizationId,
+    const whereClause: Prisma.PurchaseOrderWhereInput = {
+      ...poScope(currentUser),
     };
 
     if (status && Object.values(PurchaseOrderStatus).includes(status as PurchaseOrderStatus)) {
@@ -67,7 +57,7 @@ export async function GET (req: NextRequest) {
     });
 
     const allOrders = await db.purchaseOrder.findMany({
-      where: { organizationId: currentUser.organizationId },
+      where: { ...poScope(currentUser) },
       select: { status: true, totalAmount: true },
     });
 
@@ -88,23 +78,11 @@ export async function GET (req: NextRequest) {
 
 export async function POST (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("purchase.order.create");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
-
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const currentUser = authCheck.user!;
 
     const body = await req.json();
     const {

@@ -2,49 +2,67 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
+import { Prisma, CreditApplicationStatus } from "@prisma/client";
 import { requireAuthAndPermission } from "@/lib/permissions";
-import { CreditApplicationStatus } from "@prisma/client";
+import { buildScopeFilter, isBranchAllowed, toScopeUser, violatesSegregationOfDuties } from "@/lib/access-scope";
+import { CREDIT_ASSIGNMENT_FIELDS } from "../route";
+
+const DECISION_STATUSES: CreditApplicationStatus[] = [
+  CreditApplicationStatus.APPROVED,
+  CreditApplicationStatus.REJECTED,
+];
+
+async function ensureAssignable(
+  organizationId: string,
+  branchAllowed: (branchId?: string | null) => boolean,
+  assigneeId: string | null | undefined
+): Promise<string | null> {
+  if (!assigneeId) return null;
+  const assignee = await db.user.findFirst({
+    where: { id: assigneeId, organizationId, isActive: true },
+    select: { id: true, branchId: true },
+  });
+  if (!assignee) return "Petugas yang ditugaskan tidak ditemukan pada organisasi Anda.";
+  if (!branchAllowed(assignee.branchId)) return "Petugas yang ditugaskan berada di luar cabang Anda.";
+  return null;
+}
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("credit.application.view");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
+    const scopeUser = toScopeUser(authCheck.user!);
 
     const { id } = await params;
-    const application = await db.creditApplication.findUnique({
-      where: { id },
+    const application = await db.creditApplication.findFirst({
+      where: {
+        id,
+        ...(buildScopeFilter(scopeUser, { assignmentFields: CREDIT_ASSIGNMENT_FIELDS }) as Prisma.CreditApplicationWhereInput),
+      },
       include: {
-        applicant: { select: { id: true, fullName: true, email: true, phone: true } },
+        customer: { select: { id: true, customerNumber: true, legalName: true, customerType: true, identityNumber: true, phone: true, email: true } },
         branch: { select: { id: true, name: true, code: true } },
         marketingOfficer: { select: { id: true, fullName: true, email: true } },
         analyst: { select: { id: true, fullName: true, email: true } },
         surveyOfficer: { select: { id: true, fullName: true, email: true } },
         decisionMaker: { select: { id: true, fullName: true, email: true } },
         statusHistories: {
-          include: {
-            changedBy: { select: { id: true, fullName: true, email: true } },
-          },
+          include: { changedBy: { select: { id: true, fullName: true, email: true } } },
           orderBy: { createdAt: "desc" },
         },
         approvalRecords: {
-          include: {
-            approver: { select: { id: true, fullName: true, email: true } },
-          },
+          include: { approver: { select: { id: true, fullName: true, email: true } } },
           orderBy: { createdAt: "desc" },
         },
       },
     });
 
+    // 404 (bukan 403) agar keberadaan record di cabang/penugasan lain tidak terbocor.
     if (!application) {
       return NextResponse.json({ error: "Application not found" }, { status: 404 });
     }
@@ -52,10 +70,7 @@ export async function GET(
     return NextResponse.json({ success: true, data: application });
   } catch (error) {
     console.error("Error fetching credit application detail:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -64,34 +79,28 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("credit.application.update");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
 
+    const session = await getServerSession(authOptions);
     const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-      include: {
-        userRoles: {
-          include: { role: true },
-        },
-      },
+      where: { email: session!.user!.email! },
+      include: { userRoles: { include: { role: true } } },
     });
-
     if (!currentUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
+    const scopeUser = toScopeUser(currentUser);
 
     const { id } = await params;
-    const existing = await db.creditApplication.findUnique({
-      where: { id },
+    const existing = await db.creditApplication.findFirst({
+      where: {
+        id,
+        ...(buildScopeFilter(scopeUser, { assignmentFields: CREDIT_ASSIGNMENT_FIELDS }) as Prisma.CreditApplicationWhereInput),
+      },
     });
-
     if (!existing) {
       return NextResponse.json({ error: "Application not found" }, { status: 404 });
     }
@@ -104,51 +113,61 @@ export async function PUT(
       purpose,
       source,
       status,
+      branchId,
       assignedMarketingOfficerId,
       assignedAnalystId,
       assignedSurveyOfficerId,
       notes,
-      // 5C & Survey
       analysisData,
       surveyData,
-      // Decision
       approvedAmount,
       approvedTenorMonths,
       interestRate,
       decisionNotes,
       conditions,
-      // Realization
       realizationDate,
       realizationReference,
       realizationAmount,
       statusChangeNote,
     } = body;
 
-    const updateData = {};
+    // Cakupan cabang: pengguna bercakupan cabang tidak boleh memindahkan ke cabang lain.
+    if (branchId !== undefined && branchId && !isBranchAllowed(scopeUser, branchId)) {
+      return NextResponse.json(
+        { error: "Anda tidak berwenang memindahkan pengajuan ke cabang tersebut.", code: "BRANCH_FORBIDDEN" },
+        { status: 403 }
+      );
+    }
+
+    for (const assigneeId of [assignedMarketingOfficerId, assignedAnalystId, assignedSurveyOfficerId]) {
+      const err = await ensureAssignable(currentUser.organizationId, (b) => isBranchAllowed(scopeUser, b), assigneeId);
+      if (err) return NextResponse.json({ error: err, code: "ASSIGNEE_FORBIDDEN" }, { status: 403 });
+    }
+
+    const updateData: Prisma.CreditApplicationUncheckedUpdateInput = {};
     if (product !== undefined) updateData.product = product;
     if (requestedAmount !== undefined) updateData.requestedAmount = requestedAmount ? parseFloat(requestedAmount) : null;
     if (requestedTenorMonths !== undefined) updateData.requestedTenorMonths = requestedTenorMonths ? parseInt(requestedTenorMonths, 10) : null;
     if (purpose !== undefined) updateData.purpose = purpose;
     if (source !== undefined) updateData.source = source;
+    if (branchId !== undefined) updateData.branchId = branchId || null;
     if (assignedMarketingOfficerId !== undefined) updateData.assignedMarketingOfficerId = assignedMarketingOfficerId || null;
     if (assignedAnalystId !== undefined) updateData.assignedAnalystId = assignedAnalystId || null;
     if (assignedSurveyOfficerId !== undefined) updateData.assignedSurveyOfficerId = assignedSurveyOfficerId || null;
     if (notes !== undefined) updateData.notes = notes;
-
     if (analysisData !== undefined) updateData.analysisData = analysisData;
     if (surveyData !== undefined) updateData.surveyData = surveyData;
-
     if (approvedAmount !== undefined) updateData.approvedAmount = approvedAmount ? parseFloat(approvedAmount) : null;
     if (approvedTenorMonths !== undefined) updateData.approvedTenorMonths = approvedTenorMonths ? parseInt(approvedTenorMonths, 10) : null;
     if (interestRate !== undefined) updateData.interestRate = interestRate ? parseFloat(interestRate) : null;
     if (decisionNotes !== undefined) updateData.decisionNotes = decisionNotes;
     if (conditions !== undefined) updateData.conditions = conditions;
-
     if (realizationDate !== undefined) updateData.realizationDate = realizationDate ? new Date(realizationDate) : null;
     if (realizationReference !== undefined) updateData.realizationReference = realizationReference;
     if (realizationAmount !== undefined) updateData.realizationAmount = realizationAmount ? parseFloat(realizationAmount) : null;
 
-    const isStatusChanged = status && status !== existing.status && Object.values(CreditApplicationStatus).includes(status as CreditApplicationStatus);
+    const isStatusChanged =
+      status && status !== existing.status && Object.values(CreditApplicationStatus).includes(status as CreditApplicationStatus);
 
     let approverRoleTitle = "Pejabat Pemutus";
 
@@ -160,9 +179,30 @@ export async function PUT(
         updateData.decisionMakerId = currentUser.id;
       }
 
-      // Check level & authority when approving
+      // Pemisahan tugas (Maker-Checker): pemutus tidak boleh orang yang sama dengan
+      // pengaju (marketing), analis, atau surveyor pada pengajuan ini.
+      if (DECISION_STATUSES.includes(status as CreditApplicationStatus)) {
+        const finalMarketing =
+          assignedMarketingOfficerId !== undefined ? assignedMarketingOfficerId || null : existing.assignedMarketingOfficerId;
+        const finalAnalyst =
+          assignedAnalystId !== undefined ? assignedAnalystId || null : existing.assignedAnalystId;
+        const finalSurvey =
+          assignedSurveyOfficerId !== undefined ? assignedSurveyOfficerId || null : existing.assignedSurveyOfficerId;
+
+        if (violatesSegregationOfDuties(currentUser.id, [finalMarketing, finalAnalyst, finalSurvey])) {
+          return NextResponse.json(
+            {
+              error:
+                "Pemisahan tugas: Anda terlibat sebagai pengaju/analis/surveyor pada pengajuan ini dan tidak dapat menjadi pemutusnya.",
+              code: "SEGREGATION_OF_DUTIES",
+            },
+            { status: 403 }
+          );
+        }
+      }
+
       if (status === "APPROVED") {
-        const finalAmount = updateData.approvedAmount ?? existing.approvedAmount ?? existing.requestedAmount ?? 0;
+        const finalAmount = (updateData.approvedAmount as number | null) ?? existing.approvedAmount ?? existing.requestedAmount ?? 0;
         const roleCodes = currentUser.userRoles.map((ur) => ur.role.code);
         const isSuperAdmin = roleCodes.includes("ADMIN") || roleCodes.includes("DIRECTOR");
 
@@ -231,7 +271,7 @@ export async function PUT(
                   approverId: currentUser.id,
                   approverRoleName: approverRoleTitle,
                   status: status as CreditApplicationStatus,
-                  approvedAmount: updateData.approvedAmount ?? existing.approvedAmount ?? existing.requestedAmount ?? null,
+                  approvedAmount: (updateData.approvedAmount as number | null) ?? existing.approvedAmount ?? existing.requestedAmount ?? null,
                   notes: decisionNotes || statusChangeNote || `Putusan ${status} oleh ${approverRoleTitle}.`,
                 },
               },
@@ -239,22 +279,18 @@ export async function PUT(
           : {}),
       },
       include: {
-        applicant: { select: { id: true, fullName: true, email: true, phone: true } },
+        customer: { select: { id: true, customerNumber: true, legalName: true, customerType: true, identityNumber: true, phone: true, email: true } },
         branch: { select: { id: true, name: true, code: true } },
         marketingOfficer: { select: { id: true, fullName: true, email: true } },
         analyst: { select: { id: true, fullName: true, email: true } },
         surveyOfficer: { select: { id: true, fullName: true, email: true } },
         decisionMaker: { select: { id: true, fullName: true, email: true } },
         statusHistories: {
-          include: {
-            changedBy: { select: { id: true, fullName: true, email: true } },
-          },
+          include: { changedBy: { select: { id: true, fullName: true, email: true } } },
           orderBy: { createdAt: "desc" },
         },
         approvalRecords: {
-          include: {
-            approver: { select: { id: true, fullName: true, email: true } },
-          },
+          include: { approver: { select: { id: true, fullName: true, email: true } } },
           orderBy: { createdAt: "desc" },
         },
       },
@@ -263,10 +299,7 @@ export async function PUT(
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {
     console.error("Error updating credit application:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -275,27 +308,29 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("credit.application.delete");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
+    const scopeUser = toScopeUser(authCheck.user!);
 
     const { id } = await params;
-    await db.creditApplication.delete({
-      where: { id },
+    const existing = await db.creditApplication.findFirst({
+      where: {
+        id,
+        ...(buildScopeFilter(scopeUser, { assignmentFields: CREDIT_ASSIGNMENT_FIELDS }) as Prisma.CreditApplicationWhereInput),
+      },
+      select: { id: true },
     });
+    if (!existing) {
+      return NextResponse.json({ error: "Application not found" }, { status: 404 });
+    }
+
+    await db.creditApplication.delete({ where: { id } });
 
     return NextResponse.json({ success: true, message: "Application deleted successfully" });
   } catch (error) {
     console.error("Error deleting credit application:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

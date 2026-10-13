@@ -65,6 +65,15 @@ export async function POST (req: NextRequest) {
         return NextResponse.json({ error: "userId, title, and message are required" }, { status: 400 });
       }
 
+      // Penerima harus berada pada organisasi yang sama (mencegah pengiriman lintas organisasi).
+      const target = await db.user.findFirst({
+        where: { id: userId, organizationId: currentUser.organizationId },
+        select: { id: true },
+      });
+      if (!target) {
+        return NextResponse.json({ error: "Penerima notifikasi tidak ditemukan pada organisasi Anda.", code: "SCOPE_FORBIDDEN" }, { status: 403 });
+      }
+
       await notificationService.send({
         organizationId: currentUser.organizationId,
         userId,

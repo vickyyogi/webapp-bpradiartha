@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma, PurchaseRequestStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAnyPermission } from "@/lib/permissions";
-import { PurchaseRequestStatus } from "@prisma/client";
+import { buildScopeFilter, toScopeUser, violatesSegregationOfDuties } from "@/lib/access-scope";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = await req.json();
     const actionAuth = String(body.action || "").toUpperCase();
     const wfPermAuth = actionAuth === "APPROVE" ? "purchase.request.approve" : actionAuth === "REJECT" ? "purchase.request.reject" : null;
@@ -27,13 +21,7 @@ export async function POST(
     }
 
     const { id } = await params;
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const currentUser = authCheck.user!;
 
     const { action, comment } = body; // action: "APPROVE" | "REJECT" | "RETURN"
 
@@ -44,7 +32,7 @@ export async function POST(
     const pr = await db.purchaseRequest.findFirst({
       where: {
         id,
-        organizationId: currentUser.organizationId,
+        ...(buildScopeFilter(toScopeUser(currentUser), { assignmentFields: ["requesterId"] }) as Prisma.PurchaseRequestWhereInput),
       },
       include: {
         workflowInstances: {
@@ -67,6 +55,17 @@ export async function POST(
       return NextResponse.json(
         { error: `Purchase Request sudah berstatus ${pr.status} dan tidak dapat diubah.` },
         { status: 400 }
+      );
+    }
+
+    // Pemisahan tugas (Maker-Checker) pengadaan: pengaju tidak boleh menyetujui pengajuannya sendiri.
+    if (action === "APPROVE" && violatesSegregationOfDuties(currentUser.id, [pr.requesterId])) {
+      return NextResponse.json(
+        {
+          error: "Pemisahan tugas: Anda adalah pengaju pengadaan ini dan tidak dapat menyetujuinya sendiri.",
+          code: "SEGREGATION_OF_DUTIES",
+        },
+        { status: 403 }
       );
     }
 

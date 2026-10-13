@@ -21,6 +21,7 @@ model Organization {
   departments          Department[]
   users                User[]
   leads                Lead[] // added for Lead relation
+  customers            Customer[] // Tahap 2A (P0.2): master nasabah/debitur terpisah dari pegawai
   creditApplications   CreditApplication[]
   creditApprovalLimits CreditApprovalLimit[]
   fieldTasks           FieldTask[]
@@ -60,6 +61,7 @@ model Branch {
   organization       Organization        @relation(fields: [organizationId], references: [id])
   users              User[] // added backrelation for User.branch
   leads              Lead[] // existing leads relation
+  customers          Customer[] // Tahap 2A (P0.2): nasabah dapat terikat ke cabang
   creditApplications CreditApplication[]
   fieldTasks         FieldTask[]
   inventoryItems     InventoryItem[]
@@ -90,29 +92,29 @@ model Department {
 }
 
 model User {
-  id             String    @id @default(uuid()) @db.Uuid
-  organizationId String    @map("organization_id") @db.Uuid
-  branchId       String?   @map("branch_id") @db.Uuid
-  departmentId   String?   @map("department_id") @db.Uuid
-  email          String    @unique @db.VarChar(255)
-  passwordHash   String?   @map("password_hash") @db.Text
-  fullName       String    @map("full_name") @db.VarChar(200)
-  employeeNumber String?   @map("employee_number") @db.VarChar(100)
-  phone          String?   @db.VarChar(50)
-  isActive       Boolean   @default(true) @map("is_active")
-  lastLoginAt    DateTime? @map("last_login_at") @db.Timestamptz
+  id                  String    @id @default(uuid()) @db.Uuid
+  organizationId      String    @map("organization_id") @db.Uuid
+  branchId            String?   @map("branch_id") @db.Uuid
+  departmentId        String?   @map("department_id") @db.Uuid
+  email               String    @unique @db.VarChar(255)
+  passwordHash        String?   @map("password_hash") @db.Text
+  fullName            String    @map("full_name") @db.VarChar(200)
+  employeeNumber      String?   @map("employee_number") @db.VarChar(100)
+  phone               String?   @db.VarChar(50)
+  isActive            Boolean   @default(true) @map("is_active")
+  lastLoginAt         DateTime? @map("last_login_at") @db.Timestamptz
   // Tahap 1A — P0.1: penguncian akun & pencabutan sesi saat sandi berubah.
   failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime? @map("locked_until") @db.Timestamptz
   passwordChangedAt   DateTime? @map("password_changed_at") @db.Timestamptz
   // Tahap 1B — P0.1: autentikasi dua faktor (TOTP) untuk peran berisiko tinggi.
   // mfaSecret disimpan TERENKRIPSI (AES-256-GCM) melalui src/lib/mfa.ts.
-  mfaEnabled      Boolean   @default(false) @map("mfa_enabled")
-  mfaSecret       String?   @map("mfa_secret")
-  mfaEnrolledAt   DateTime? @map("mfa_enrolled_at") @db.Timestamptz
-  mfaLastTimeStep Int?      @map("mfa_last_time_step")
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  mfaEnabled          Boolean   @default(false) @map("mfa_enabled")
+  mfaSecret           String?   @map("mfa_secret")
+  mfaEnrolledAt       DateTime? @map("mfa_enrolled_at") @db.Timestamptz
+  mfaLastTimeStep     Int?      @map("mfa_last_time_step")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
   organization Organization @relation(fields: [organizationId], references: [id])
   branch       Branch?      @relation(fields: [branchId], references: [id])
@@ -122,27 +124,40 @@ model User {
 
   userRoles UserRole[] // backrelation for UserRole.user
 
-  creditApplications              CreditApplication[]    @relation("CreditApplicant")
-  marketingCreditApplications     CreditApplication[]    @relation("CreditMarketingOfficer")
-  analystCreditApplications       CreditApplication[]    @relation("CreditAnalyst")
-  surveyCreditApplications        CreditApplication[]    @relation("CreditSurveyOfficer")
-  decisionCreditApplications      CreditApplication[]    @relation("CreditDecisionMaker")
-  statusChanges                   CreditStatusHistory[]
-  creditApprovals                 CreditApprovalRecord[]
-  assignedFieldTasks              FieldTask[]            @relation("OfficerFieldTasks")
-  uploadedDocuments               Document[]             @relation("DocumentUploader")
-  assignedAssets                  Asset[]                @relation("AssetCurrentHolder")
-  performedInventoryTransactions  InventoryTransaction[] @relation("InventoryTransactionPerformer")
-  performedAssetHistories         AssetHistory[]         @relation("AssetHistoryPerformer")
-  performedAssetMaintenances      AssetMaintenance[]     @relation("AssetMaintenancePerformer")
-  requestedPurchaseRequests       PurchaseRequest[]      @relation("PurchaseRequester")
-  createdPurchaseOrders           PurchaseOrder[]        @relation("PurchaseOrderCreator")
-  receivedGoodsReceipts           GoodsReceipt[]         @relation("GoodsReceiptReceiver")
-  performedWorkflowActions        WorkflowAction[]       @relation("WorkflowActionActor")
-  auditLogs                       AuditLog[]             @relation("AuditLogUser")
-  notifications                   Notification[]         @relation("UserNotifications")
-  mfaBackupCodes                  MfaBackupCode[]
-  mfaChallenges                   MfaChallenge[]
+  // Tahap 2A (P0.2): relasi master nasabah dibuat/diubah/diverifikasi oleh pegawai.
+  createdCustomers  Customer[] @relation("CustomerCreatedBy")
+  updatedCustomers  Customer[] @relation("CustomerUpdatedBy")
+  verifiedCustomers Customer[] @relation("CustomerVerifiedBy")
+
+  // Tahap 2B (P0.2): jejak riwayat identitas, hubungan, dan consent nasabah.
+  customerHistoriesChanged     CustomerIdentityHistory[] @relation("CustomerHistoryChangedBy")
+  customerHistoriesVerified    CustomerIdentityHistory[] @relation("CustomerHistoryVerifiedBy")
+  customerRelationshipsCreated CustomerRelationship[]    @relation("CustomerRelationshipCreator")
+  customerConsentsRecorded     CustomerConsent[]         @relation("CustomerConsentRecorder")
+
+  marketingCreditApplications    CreditApplication[]    @relation("CreditMarketingOfficer")
+  analystCreditApplications      CreditApplication[]    @relation("CreditAnalyst")
+  surveyCreditApplications       CreditApplication[]    @relation("CreditSurveyOfficer")
+  decisionCreditApplications     CreditApplication[]    @relation("CreditDecisionMaker")
+  statusChanges                  CreditStatusHistory[]
+  creditApprovals                CreditApprovalRecord[]
+  assignedFieldTasks             FieldTask[]            @relation("OfficerFieldTasks")
+  uploadedDocuments              Document[]             @relation("DocumentUploader")
+  assignedAssets                 Asset[]                @relation("AssetCurrentHolder")
+  performedInventoryTransactions InventoryTransaction[] @relation("InventoryTransactionPerformer")
+  performedAssetHistories        AssetHistory[]         @relation("AssetHistoryPerformer")
+  performedAssetMaintenances     AssetMaintenance[]     @relation("AssetMaintenancePerformer")
+  requestedPurchaseRequests      PurchaseRequest[]      @relation("PurchaseRequester")
+  createdPurchaseOrders          PurchaseOrder[]        @relation("PurchaseOrderCreator")
+  receivedGoodsReceipts          GoodsReceipt[]         @relation("GoodsReceiptReceiver")
+  performedWorkflowActions       WorkflowAction[]       @relation("WorkflowActionActor")
+  auditLogs                      AuditLog[]             @relation("AuditLogUser")
+  notifications                  Notification[]         @relation("UserNotifications")
+  mfaBackupCodes                 MfaBackupCode[]
+  mfaChallenges                  MfaChallenge[]
+  passwordResetTokens            PasswordResetToken[]
+  mustChangePassword             Boolean                @default(false) @map("must_change_password")
+  sessionsValidFrom              DateTime?              @map("sessions_valid_from") @db.Timestamptz
 
   @@map("users")
 }
@@ -176,6 +191,24 @@ model MfaChallenge {
 
   @@index([userId])
   @@map("mfa_challenges")
+}
+
+/// Tautan reset kata sandi (Tahap 1B-2). Yang disimpan hanya hash token,
+/// berumur pendek (30 menit), sekali pakai, dan membatasi percobaan.
+model PasswordResetToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash") @db.VarChar(128)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz
+  usedAt      DateTime? @map("used_at") @db.Timestamptz
+  attempts    Int       @default(0)
+  requestedIp String?   @map("requested_ip") @db.VarChar(64)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 model Role {
@@ -262,6 +295,179 @@ model Lead {
   @@map("leads")
 }
 
+// ==========================================
+// SECTION 2A (Tahap 2 — P0.2): MASTER NASABAH / DEBITUR
+// Entitas ini TERPISAH dari User/Pegawai. Pengajuan kredit merujuk ke Customer,
+// bukan ke akun pegawai. Identitas disimpan terstruktur, bukan di catatan bebas.
+// ==========================================
+
+enum CustomerType {
+  INDIVIDU
+  BADAN
+}
+
+enum CustomerStatus {
+  PROSPEK
+  AKTIF
+  NONAKTIF
+  BLACKLIST
+}
+
+model Customer {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  branchId       String?        @map("branch_id") @db.Uuid
+  customerNumber String         @map("customer_number") @db.VarChar(50)
+  customerType   CustomerType   @default(INDIVIDU) @map("customer_type")
+  status         CustomerStatus @default(PROSPEK)
+  legalName      String         @map("legal_name") @db.VarChar(200)
+  nickname       String?        @db.VarChar(100)
+
+  // Identitas (terstruktur). Untuk INDIVIDU: NIK (KTP). Untuk BADAN: nomor ID usaha/NIB.
+  identityType   String?   @map("identity_type") @db.VarChar(50) // KTP, SIM, PASPOR, NIB, NPWP
+  identityNumber String?   @map("identity_number") @db.VarChar(64) // NIK 16 digit / ID usaha
+  npwp           String?   @db.VarChar(40)
+  birthPlace     String?   @map("birth_place") @db.VarChar(150)
+  birthDate      DateTime? @map("birth_date") @db.Timestamptz // tanggal lahir (INDIVIDU) / tanggal berdiri (BADAN)
+  gender         String?   @db.VarChar(20)
+
+  // Alamat terstruktur
+  address    String? @db.Text
+  rtRw       String? @map("rt_rw") @db.VarChar(20)
+  kelurahan  String? @db.VarChar(100)
+  kecamatan  String? @db.VarChar(100)
+  city       String? @db.VarChar(100)
+  province   String? @db.VarChar(100)
+  postalCode String? @map("postal_code") @db.VarChar(10)
+
+  // Kontak
+  phone String? @db.VarChar(50)
+  email String? @db.VarChar(255)
+
+  // Profil usaha/pekerjaan (opsional)
+  occupation    String? @db.VarChar(150)
+  employerName  String? @map("employer_name") @db.VarChar(200)
+  monthlyIncome Float?  @map("monthly_income") // nominal belum dimigrasikan ke Decimal pada tahap ini (P0.6 = Tahap 6)
+
+  // Jejak perubahan & verifikasi identitas (P0.2)
+  createdById  String?   @map("created_by_id") @db.Uuid
+  updatedById  String?   @map("updated_by_id") @db.Uuid
+  verifiedById String?   @map("verified_by_id") @db.Uuid
+  verifiedAt   DateTime? @map("verified_at") @db.Timestamptz
+
+  // Jejak konversi data lama (Tahap 2A): id baris users yang dahulu dipakai sebagai pemohon.
+  // Kolom ini HANYA untuk penelusuran migrasi dan TIDAK memberi hak login apa pun.
+  legacyApplicantUserId String? @map("legacy_applicant_user_id") @db.Uuid
+
+  isActive  Boolean  @default(true) @map("is_active")
+  notes     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  branch       Branch?      @relation(fields: [branchId], references: [id])
+  createdBy    User?        @relation("CustomerCreatedBy", fields: [createdById], references: [id])
+  updatedBy    User?        @relation("CustomerUpdatedBy", fields: [updatedById], references: [id])
+  verifiedBy   User?        @relation("CustomerVerifiedBy", fields: [verifiedById], references: [id])
+
+  creditApplications CreditApplication[]
+
+  // Tahap 2B (P0.2): riwayat identitas, hubungan antar-pihak, dan persetujuan data pribadi.
+  identityHistories      CustomerIdentityHistory[]
+  relationshipsAsSubject CustomerRelationship[]    @relation("CustomerRelationshipSubject")
+  relationshipsAsRelated CustomerRelationship[]    @relation("CustomerRelationshipRelated")
+  consents               CustomerConsent[]
+
+  @@unique([organizationId, customerNumber])
+  @@index([organizationId, identityNumber])
+  @@index([organizationId, legalName])
+  @@map("customers")
+}
+
+/// Riwayat perubahan identitas nasabah (Tahap 2B — P0.2).
+/// Mencatat siapa mengubah, kapan, field apa, nilai lama/baru, dan verifikator.
+model CustomerIdentityHistory {
+  id            String   @id @default(uuid()) @db.Uuid
+  customerId    String   @map("customer_id") @db.Uuid
+  changedById   String?  @map("changed_by_id") @db.Uuid
+  verifiedById  String?  @map("verified_by_id") @db.Uuid
+  action        String   @db.VarChar(50) // CREATE, UPDATE, VERIFY
+  changedFields Json?    @map("changed_fields") // daftar nama field identitas yang berubah
+  oldValues     Json?    @map("old_values")
+  newValues     Json?    @map("new_values")
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  changedBy  User?    @relation("CustomerHistoryChangedBy", fields: [changedById], references: [id])
+  verifiedBy User?    @relation("CustomerHistoryVerifiedBy", fields: [verifiedById], references: [id])
+
+  @@index([customerId, createdAt])
+  @@map("customer_identity_histories")
+}
+
+enum CustomerRelationshipType {
+  SPOUSE
+  GUARANTOR
+  UBO
+  FAMILY
+  BUSINESS_PARTNER
+  OTHER
+}
+
+/// Hubungan antar-pihak (Tahap 2B — P0.2): pasangan, penjamin, UBO, dsb.
+/// Pihak terkait dapat berupa nasabah lain (relatedCustomerId) atau nama/identitas lepas.
+model CustomerRelationship {
+  id                    String                   @id @default(uuid()) @db.Uuid
+  customerId            String                   @map("customer_id") @db.Uuid
+  relatedCustomerId     String?                  @map("related_customer_id") @db.Uuid
+  relationshipType      CustomerRelationshipType @map("relationship_type")
+  relatedName           String?                  @map("related_name") @db.VarChar(200)
+  relatedIdentityNumber String?                  @map("related_identity_number") @db.VarChar(64)
+  notes                 String?                  @db.Text
+  createdById           String?                  @map("created_by_id") @db.Uuid
+  createdAt             DateTime                 @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime                 @updatedAt @map("updated_at") @db.Timestamptz
+
+  customer        Customer  @relation("CustomerRelationshipSubject", fields: [customerId], references: [id], onDelete: Cascade)
+  relatedCustomer Customer? @relation("CustomerRelationshipRelated", fields: [relatedCustomerId], references: [id])
+  createdBy       User?     @relation("CustomerRelationshipCreator", fields: [createdById], references: [id])
+
+  @@index([customerId])
+  @@index([relatedCustomerId])
+  @@map("customer_relationships")
+}
+
+enum CustomerConsentType {
+  DATA_PROCESSING
+  DATA_SHARING
+  MARKETING
+  CREDIT_CHECK
+}
+
+/// Bukti persetujuan pemrosesan data pribadi (Tahap 2B — P0.2).
+/// Bersifat catatan (append-only secara operasional): pemberian dan pencabutan direkam.
+model CustomerConsent {
+  id            String              @id @default(uuid()) @db.Uuid
+  customerId    String              @map("customer_id") @db.Uuid
+  consentType   CustomerConsentType @map("consent_type")
+  granted       Boolean             @default(true)
+  policyVersion String?             @map("policy_version") @db.VarChar(50)
+  evidenceRef   String?             @map("evidence_ref") @db.VarChar(255)
+  grantedAt     DateTime?           @map("granted_at") @db.Timestamptz
+  revokedAt     DateTime?           @map("revoked_at") @db.Timestamptz
+  recordedById  String?             @map("recorded_by_id") @db.Uuid
+  notes         String?             @db.Text
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  recordedBy User?    @relation("CustomerConsentRecorder", fields: [recordedById], references: [id])
+
+  @@index([customerId, consentType])
+  @@map("customer_consents")
+}
+
 enum CreditApplicationStatus {
   DRAFT
   SUBMITTED
@@ -280,7 +486,7 @@ model CreditApplication {
   organizationId             String                  @map("organization_id") @db.Uuid
   branchId                   String?                 @map("branch_id") @db.Uuid
   applicationNumber          String                  @unique @db.VarChar(50)
-  applicantId                String                  @map("applicant_id") @db.Uuid
+  customerId                 String                  @map("customer_id") @db.Uuid
   product                    String?                 @db.VarChar(200)
   requestedAmount            Float?
   requestedTenorMonths       Int?
@@ -316,7 +522,7 @@ model CreditApplication {
 
   organization     Organization @relation(fields: [organizationId], references: [id])
   branch           Branch?      @relation(fields: [branchId], references: [id])
-  applicant        User         @relation("CreditApplicant", fields: [applicantId], references: [id])
+  customer         Customer     @relation(fields: [customerId], references: [id])
   marketingOfficer User?        @relation("CreditMarketingOfficer", fields: [assignedMarketingOfficerId], references: [id])
   analyst          User?        @relation("CreditAnalyst", fields: [assignedAnalystId], references: [id])
   surveyOfficer    User?        @relation("CreditSurveyOfficer", fields: [assignedSurveyOfficerId], references: [id])
@@ -989,22 +1195,22 @@ model CmsGallery {
 }
 
 model CmsProduct {
-  id             String    @id @default(uuid()) @db.Uuid
-  organizationId String    @map("organization_id") @db.Uuid
-  name           String    @db.VarChar(200)
-  slug           String    @db.VarChar(200)
-  category       String    @default("KREDIT") @db.VarChar(100) // KREDIT, SIMPANAN, DEPOSITO, LAYANAN
-  description    String    @db.Text
-  features       String    @default("[]") @db.Text // JSON string of bullet points: ["Plafon s.d...", ...]
-  icon           String?   @default("Briefcase") @db.VarChar(50) // Briefcase, CreditCard, PiggyBank, Building2, ShieldCheck, Landmark, Wallet, Coins
-  badge          String?   @db.VarChar(100) // Populer, Bunga Rendah, Dijamin LPS
-  ctaText        String?   @default("Ajukan Pinjaman") @map("cta_text") @db.VarChar(100)
-  ctaLink        String?   @default("#form-pengajuan") @map("cta_link") @db.VarChar(255)
-  sortOrder      Int       @default(0) @map("sort_order")
-  isActive       Boolean   @default(true) @map("is_active")
-  isDefault      Boolean   @default(false) @map("is_default")
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String   @db.VarChar(200)
+  slug           String   @db.VarChar(200)
+  category       String   @default("KREDIT") @db.VarChar(100) // KREDIT, SIMPANAN, DEPOSITO, LAYANAN
+  description    String   @db.Text
+  features       String   @default("[]") @db.Text // JSON string of bullet points: ["Plafon s.d...", ...]
+  icon           String?  @default("Briefcase") @db.VarChar(50) // Briefcase, CreditCard, PiggyBank, Building2, ShieldCheck, Landmark, Wallet, Coins
+  badge          String?  @db.VarChar(100) // Populer, Bunga Rendah, Dijamin LPS
+  ctaText        String?  @default("Ajukan Pinjaman") @map("cta_text") @db.VarChar(100)
+  ctaLink        String?  @default("#form-pengajuan") @map("cta_link") @db.VarChar(255)
+  sortOrder      Int      @default(0) @map("sort_order")
+  isActive       Boolean  @default(true) @map("is_active")
+  isDefault      Boolean  @default(false) @map("is_default")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -1020,7 +1226,7 @@ model CmsReport {
   slug           String    @db.VarChar(255)
   category       String    @default("KEUANGAN") @db.VarChar(100) // KEUANGAN, TATA_KELOLA, TAHUNAN, KEBERLANJUTAN, LAINNYA
   period         String?   @db.VarChar(100) // e.g. "Triwulan I", "Triwulan II", "Semester I", "Tahunan"
-  year           Int?      // e.g. 2026
+  year           Int? // e.g. 2026
   description    String?   @db.Text
   fileUrl        String    @map("file_url") @db.Text
   fileName       String?   @map("file_name") @db.VarChar(255)
@@ -1031,7 +1237,7 @@ model CmsReport {
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@unique([organizationId, slug])
   @@index([organizationId, isActive])
@@ -1103,6 +1309,3 @@ model MasterItem {
   @@index([organizationId, category, isActive])
   @@map("master_items")
 }
-
-
-

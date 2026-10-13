@@ -184,6 +184,7 @@ export function DashboardShell({
           children: [
             { title: "Ringkasan CRM", href: "/crm" },
             { title: "Data Prospek (Leads)", href: "/crm/leads" },
+            { title: "Data Nasabah (Customers)", href: "/crm/customers" },
           ],
         },
         {
@@ -428,12 +429,16 @@ export function DashboardShell({
         <div className="ml-auto flex items-center gap-3">
           <ThemeToggle />
           <NotificationBell />
-          <div className="hidden sm:flex flex-col items-end">
+          <Link
+            href="/account/password"
+            title="Keamanan akun: ganti kata sandi & keluar dari semua perangkat"
+            className="hidden sm:flex flex-col items-end rounded-md px-2 py-1 hover:bg-primary-soft transition-colors"
+          >
             <span className="text-sm font-semibold leading-none text-foreground">{userName}</span>
             <span className="text-[11px] font-medium text-gold-dark bg-gold-soft px-1.5 py-0.5 rounded mt-1 border border-gold/30">
               {userRoleLabel}
             </span>
-          </div>
+          </Link>
           <LogoutButton />
           
         </div>

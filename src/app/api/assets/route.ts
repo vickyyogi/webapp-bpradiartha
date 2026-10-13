@@ -1,29 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma, AssetCondition, AssetStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
-import { AssetCondition, AssetStatus } from "@prisma/client";
+import { buildScopeFilter, isBranchAllowed, toScopeUser } from "@/lib/access-scope";
+
+const assetScope = (user: Parameters<typeof toScopeUser>[0]) =>
+  buildScopeFilter(toScopeUser(user), { assignmentFields: ["currentHolderId"] }) as Prisma.AssetWhereInput;
 
 export async function GET (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("asset.view");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
-
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const currentUser = authCheck.user!;
 
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search");
@@ -32,8 +22,8 @@ export async function GET (req: NextRequest) {
     const condition = searchParams.get("condition");
     const branchId = searchParams.get("branchId");
 
-    const whereClause = {
-      organizationId: currentUser.organizationId,
+    const whereClause: Prisma.AssetWhereInput = {
+      ...assetScope(currentUser),
     };
 
     if (category && category !== "ALL") {
@@ -79,7 +69,7 @@ export async function GET (req: NextRequest) {
 
     // Summary calculations across all organization assets
     const allOrgAssets = await db.asset.findMany({
-      where: { organizationId: currentUser.organizationId },
+      where: { ...assetScope(currentUser) },
       select: { status: true, condition: true, purchasePrice: true },
     });
 
@@ -100,23 +90,11 @@ export async function GET (req: NextRequest) {
 
 export async function POST (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("asset.create");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
-
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const currentUser = authCheck.user!;
 
     const body = await req.json();
     const {
@@ -140,6 +118,26 @@ export async function POST (req: NextRequest) {
         { error: "Nama aset dan kategori wajib diisi." },
         { status: 400 }
       );
+    }
+
+    const scopeUser = toScopeUser(currentUser);
+    if (branchId && !isBranchAllowed(scopeUser, branchId)) {
+      return NextResponse.json(
+        { error: "Anda tidak berwenang menambah aset pada cabang tersebut.", code: "BRANCH_FORBIDDEN" },
+        { status: 403 }
+      );
+    }
+    if (currentHolderId) {
+      const holder = await db.user.findFirst({
+        where: { id: currentHolderId, organizationId: currentUser.organizationId, isActive: true },
+        select: { branchId: true },
+      });
+      if (!holder || !isBranchAllowed(scopeUser, holder.branchId)) {
+        return NextResponse.json(
+          { error: "Pemegang aset berada di luar cabang Anda.", code: "ASSIGNEE_FORBIDDEN" },
+          { status: 403 }
+        );
+      }
     }
 
     // Generate asset number if not provided

@@ -1,38 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma, AssetCondition } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
-import { AssetCondition } from "@prisma/client";
+import { buildScopeFilter, toScopeUser } from "@/lib/access-scope";
+
+const assetScope = (user: Parameters<typeof toScopeUser>[0]) =>
+  buildScopeFilter(toScopeUser(user), { assignmentFields: ["currentHolderId"] }) as Prisma.AssetWhereInput;
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("asset.view");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
 
     const { id } = await params;
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
 
     const asset = await db.asset.findFirst({
       where: {
         id,
-        organizationId: currentUser.organizationId,
+        ...assetScope(authCheck.user!),
       },
       include: {
         branch: { select: { id: true, name: true, code: true } },
@@ -88,29 +78,18 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("asset.update");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
+    const currentUser = authCheck.user!;
 
     const { id } = await params;
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
 
     const asset = await db.asset.findFirst({
       where: {
         id,
-        organizationId: currentUser.organizationId,
+        ...assetScope(authCheck.user!),
       },
     });
 

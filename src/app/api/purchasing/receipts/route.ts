@@ -1,33 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma, PurchaseOrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
-import { PurchaseOrderStatus } from "@prisma/client";
+import { buildScopeFilter, toScopeUser } from "@/lib/access-scope";
 
 export async function GET (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("purchase.receipt.view");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
-
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const currentUser = authCheck.user!;
 
     const receipts = await db.goodsReceipt.findMany({
       where: {
-        organizationId: currentUser.organizationId,
+        ...(buildScopeFilter(toScopeUser(currentUser), { assignmentFields: ["receivedById"] }) as Prisma.GoodsReceiptWhereInput),
       },
       include: {
         purchaseOrder: {
@@ -52,23 +39,11 @@ export async function GET (req: NextRequest) {
 
 export async function POST (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("purchase.receipt.create");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
-
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const currentUser = authCheck.user!;
 
     const body = await req.json();
     const {
@@ -89,7 +64,7 @@ export async function POST (req: NextRequest) {
     const po = await db.purchaseOrder.findFirst({
       where: {
         id: purchaseOrderId,
-        organizationId: currentUser.organizationId,
+        ...(buildScopeFilter(toScopeUser(currentUser), { assignmentFields: ["createdById"] }) as Prisma.PurchaseOrderWhereInput),
       },
       include: {
         items: true,

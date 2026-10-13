@@ -168,14 +168,21 @@ export const authOptions: NextAuthOptions = {
       if (typeof token.id === "string" && nowSeconds - checkedAt > SESSION_REVALIDATE_AFTER_SECONDS) {
         const fresh = await db.user.findUnique({
           where: { id: token.id },
-          select: { isActive: true, passwordChangedAt: true },
+          select: { isActive: true, passwordChangedAt: true, sessionsValidFrom: true },
         });
 
         const currentStamp = fresh?.passwordChangedAt ? fresh.passwordChangedAt.toISOString() : null;
         const previousStamp = typeof token.pwdChangedAt === "string" ? token.pwdChangedAt : null;
         const changedAfter = currentStamp !== previousStamp && currentStamp !== null;
 
-        token.active = Boolean(fresh && fresh.isActive && !changedAfter);
+        // Tahap 1B-3: "keluar dari semua perangkat" menandai tidak berlaku setiap sesi
+        // yang terbit pada atau sebelum waktu itu — termasuk sesi yang memicunya.
+        const issuedAt = typeof token.iat === "number" ? token.iat : 0;
+        const revokedByDeviceLogout = fresh?.sessionsValidFrom
+          ? issuedAt <= Math.floor(fresh.sessionsValidFrom.getTime() / 1000)
+          : false;
+
+        token.active = Boolean(fresh && fresh.isActive && !changedAfter && !revokedByDeviceLogout);
         token.authCheckedAt = nowSeconds;
       }
 

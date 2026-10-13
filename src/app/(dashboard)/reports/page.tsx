@@ -323,7 +323,7 @@ export default function ReportsDashboardPage() {
                           <td className="py-2 px-3 font-mono text-xs font-semibold text-primary">
                             {c.applicationNumber}
                           </td>
-                          <td className="py-2 px-3 text-xs font-medium">{c.applicant?.fullName}</td>
+                          <td className="py-2 px-3 text-xs font-medium">{c.customer?.legalName}</td>
                           <td className="py-2 px-3 text-xs text-muted-foreground">{c.product || "-"}</td>
                           <td className="py-2 px-3 text-right font-mono text-xs">
                             Rp {c.requestedAmount?.toLocaleString("id-ID")}

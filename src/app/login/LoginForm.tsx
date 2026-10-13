@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -194,6 +195,14 @@ export function LoginForm() {
             >
               Kembali ke langkah pertama
             </button>
+          )}
+          {!challengeToken && (
+            <Link
+              href="/forgot-password"
+              className="text-[11px] font-medium text-muted-foreground hover:text-foreground underline underline-offset-2"
+            >
+              Lupa kata sandi?
+            </Link>
           )}
         </CardFooter>
       </form>

@@ -37,7 +37,7 @@ import {
 export type CreditApplication = {
   id: string;
   applicationNumber: string;
-  applicantId: string;
+  customerId: string;
   branchId: string | null;
   product: string | null;
   requestedAmount: number | null;
@@ -62,7 +62,15 @@ export type CreditApplication = {
   notes: string | null;
   createdAt: string | Date;
   updatedAt: string | Date;
-  applicant?: { id: string; fullName: string; email: string; phone?: string | null } | null;
+  customer?: {
+    id: string;
+    customerNumber: string;
+    legalName: string;
+    customerType?: string;
+    identityNumber?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  } | null;
   branch?: { id: string; name: string; code: string } | null;
   marketingOfficer?: { id: string; fullName: string; email: string } | null;
   analyst?: { id: string; fullName: string; email: string } | null;
@@ -73,6 +81,15 @@ type UserOption = {
   id: string;
   fullName: string;
   email: string;
+};
+
+type CustomerOption = {
+  id: string;
+  customerNumber: string;
+  legalName: string;
+  customerType?: string;
+  identityNumber?: string | null;
+  phone?: string | null;
 };
 
 type BranchOption = {
@@ -104,6 +121,7 @@ interface Props {
   branches: BranchOption[];
   leads?: LeadOption[];
   documents?: DocumentOption[];
+  customers: CustomerOption[];
 }
 
 const STATUS_CONFIG: Record<
@@ -146,6 +164,7 @@ export function CreditApplicationsClientView({
   branches,
   leads = [],
   documents = [],
+  customers = [],
 }: Props) {
   const [applications, setApplications] = useState<CreditApplication[]>(initialApplications);
   const [docList, setDocList] = useState<DocumentOption[]>(documents);
@@ -157,8 +176,8 @@ export function CreditApplicationsClientView({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Applicant Mode: 'MANUAL' | 'LEAD' | 'USER'
-  const [applicantMode, setApplicantMode] = useState<"MANUAL" | "LEAD" | "USER">("MANUAL");
+  // Mode pemohon: 'MANUAL' | 'LEAD' | 'CUSTOMER' (nasabah terdaftar)
+  const [applicantMode, setApplicantMode] = useState<"MANUAL" | "LEAD" | "CUSTOMER">("MANUAL");
 
   // KTP Upload State
   const [ktpData, setKtpData] = useState<{ fileName: string; fileData: string; mimeType: string } | null>(null);
@@ -171,7 +190,7 @@ export function CreditApplicationsClientView({
     purpose: "",
     source: "Marketing Officer",
     branchId: branches[0]?.id || "",
-    applicantId: users[0]?.id || "",
+    applicantId: customers[0]?.id || "",
 
     // Manual Applicant
     applicantName: "",
@@ -199,7 +218,7 @@ export function CreditApplicationsClientView({
       purpose: "",
       source: "Marketing Officer",
       branchId: branches[0]?.id || "",
-      applicantId: users[0]?.id || "",
+      applicantId: customers[0]?.id || "",
       applicantName: "",
       applicantNik: "",
       applicantPhone: "",
@@ -265,11 +284,11 @@ export function CreditApplicationsClientView({
       purpose: app.purpose || "",
       source: app.source || APPLICATION_SOURCES[0],
       branchId: app.branchId || branches[0]?.id || "",
-      applicantId: app.applicantId || users[0]?.id || "",
-      applicantName: app.applicant?.fullName || "",
+      applicantId: app.customerId || customers[0]?.id || "",
+      applicantName: app.customer?.legalName || "",
       applicantNik: "",
-      applicantPhone: app.applicant?.phone || "",
-      applicantEmail: app.applicant?.email || "",
+      applicantPhone: app.customer?.phone || "",
+      applicantEmail: app.customer?.email || "",
       applicantAddress: "",
       leadId: "",
       assignedMarketingOfficerId: app.assignedMarketingOfficerId || "",
@@ -406,7 +425,7 @@ export function CreditApplicationsClientView({
     const matchesSearch =
       !searchQuery ||
       app.applicationNumber.toLowerCase().includes(q) ||
-      (app.applicant?.fullName && app.applicant.fullName.toLowerCase().includes(q)) ||
+      (app.customer?.legalName && app.customer.legalName.toLowerCase().includes(q)) ||
       (app.product && app.product.toLowerCase().includes(q)) ||
       (app.purpose && app.purpose.toLowerCase().includes(q));
 
@@ -509,9 +528,9 @@ export function CreditApplicationsClientView({
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="font-semibold text-sm">{app.applicant?.fullName || "Debitur Nasabah"}</div>
+                          <div className="font-semibold text-sm">{app.customer?.legalName || "Debitur Nasabah"}</div>
                           <div className="text-xs text-muted-foreground">
-                            {app.applicant?.phone || app.applicant?.email || "-"}
+                            {app.customer?.phone || app.customer?.email || "-"}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -655,10 +674,10 @@ export function CreditApplicationsClientView({
                   <Button
                     type="button"
                     size="sm"
-                    variant={applicantMode === "USER" ? "default" : "outline"}
-                    onClick={() => setApplicantMode("USER")}
+                    variant={applicantMode === "CUSTOMER" ? "default" : "outline"}
+                    onClick={() => setApplicantMode("CUSTOMER")}
                   >
-                    3. Dari User Sistem
+                    3. Dari Nasabah Terdaftar ({customers.length})
                   </Button>
                 </div>
               </div>
@@ -751,19 +770,21 @@ export function CreditApplicationsClientView({
                 </div>
               )}
 
-              {/* Mode 3: Existing User */}
-              {applicantMode === "USER" && (
+              {/* Mode 3: Existing Customer */}
+              {applicantMode === "CUSTOMER" && (
                 <div>
-                  <label className="text-xs font-medium">Pilih User Sistem sebagai Pemohon *</label>
+                  <label className="text-xs font-medium">Pilih Nasabah Terdaftar sebagai Pemohon *</label>
                   <select
                     value={formData.applicantId}
                     onChange={(e) => setFormData({ ...formData, applicantId: e.target.value })}
                     className="w-full mt-1.5 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
                     required
                   >
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.fullName} ({u.email})
+                    {customers.length === 0 && <option value="">Belum ada nasabah terdaftar</option>}
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.legalName} — {c.customerNumber}
+                        {c.identityNumber ? ` • NIK ${c.identityNumber}` : ""}
                       </option>
                     ))}
                   </select>

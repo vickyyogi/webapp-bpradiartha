@@ -1,37 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAnyPermission } from "@/lib/permissions";
+import { buildScopeFilter, toScopeUser } from "@/lib/access-scope";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAnyPermission(["purchase.order.view"]);
     if (!authCheck.authorized) {
       return authCheck.response;
     }
+    const currentUser = authCheck.user!;
 
     const { id } = await params;
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
 
     const order = await db.purchaseOrder.findFirst({
       where: {
         id,
-        organizationId: currentUser.organizationId,
+        ...(buildScopeFilter(toScopeUser(currentUser), { assignmentFields: ["createdById"] }) as Prisma.PurchaseOrderWhereInput),
       },
       include: {
         vendor: true,

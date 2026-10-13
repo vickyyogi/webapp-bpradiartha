@@ -4,6 +4,8 @@ import { Users2, UserPlus, Filter, FileText, PhoneCall } from "lucide-react";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma } from "@prisma/client";
+import { buildScopeFilter, toScopeUser } from "@/lib/access-scope";
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -16,12 +18,17 @@ export default async function CrmDashboardPage() {
   const session = await getServerSession(authOptions);
   const currentUser = await db.user.findUnique({
     where: { email: session?.user?.email || "" },
+    include: { userRoles: { include: { role: true } } },
   });
 
+  const leadScope = currentUser
+    ? (buildScopeFilter(toScopeUser(currentUser), { assignmentFields: ["assignedOfficerId"] }) as Prisma.LeadWhereInput)
+    : { organizationId: "__none__" };
+
   const [totalLeads, newLeads, convertedLeads] = await Promise.all([
-    db.lead.count({ where: currentUser?.organizationId ? { organizationId: currentUser.organizationId } : {} }),
-    db.lead.count({ where: { status: "NEW", ...(currentUser?.organizationId ? { organizationId: currentUser.organizationId } : {}) } }),
-    db.lead.count({ where: { status: "CONVERTED", ...(currentUser?.organizationId ? { organizationId: currentUser.organizationId } : {}) } }),
+    db.lead.count({ where: leadScope }),
+    db.lead.count({ where: { ...leadScope, status: "NEW" } }),
+    db.lead.count({ where: { ...leadScope, status: "CONVERTED" } }),
   ]);
 
   const crmModules = [
@@ -36,8 +43,8 @@ export default async function CrmDashboardPage() {
       title: "Data Nasabah (Customers)",
       description: "Database nasabah aktif yang telah terkonversi dan memiliki riwayat rekening/kredit.",
       icon: Users2,
-      href: "/crm/leads", // currently redirects to leads until customers module
-      badge: "Tahap Lanjutan",
+      href: "/crm/customers",
+      badge: "Tahap 2",
     },
     {
       title: "Pipeline & Follow Up",

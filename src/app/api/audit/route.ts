@@ -1,27 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
+import { resolveScopeLevel, toScopeUser } from "@/lib/access-scope";
 
 export async function GET (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("audit.log.view");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
+    const currentUser = authCheck.user!;
 
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    // Jejak audit bersifat lintas cabang: hanya peran bercakupan ORGANIZATION
+    // (mis. Admin Operasional, Manajemen, Auditor) yang boleh membacanya.
+    if (resolveScopeLevel(toScopeUser(currentUser)) !== "ORGANIZATION") {
+      return NextResponse.json(
+        { error: "Akses jejak audit memerlukan cakupan organisasi (lintas cabang).", code: "SCOPE_FORBIDDEN" },
+        { status: 403 }
+      );
     }
 
     const { searchParams } = new URL(req.url);
@@ -33,7 +30,7 @@ export async function GET (req: NextRequest) {
     const endDate = searchParams.get("endDate");
     const limit = Math.min(200, Number(searchParams.get("limit")) || 50);
 
-    const whereClause = {
+    const whereClause: Prisma.AuditLogWhereInput = {
       organizationId: currentUser.organizationId,
     };
 

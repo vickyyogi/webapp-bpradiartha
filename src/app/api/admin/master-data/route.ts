@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission, requireAnyPermission } from "@/lib/permissions";
 import { logAudit, extractClientInfo } from "@/lib/audit";
@@ -16,7 +15,7 @@ export async function GET (req: NextRequest) {
     const category = searchParams.get("category");
     const activeOnly = searchParams.get("activeOnly") === "true";
 
-    const where = {};
+    const where: Prisma.MasterItemWhereInput = { organizationId: authCheck.user!.organizationId };
     if (category && category !== "ALL") {
       where.category = category;
     }
@@ -38,23 +37,11 @@ export async function GET (req: NextRequest) {
 
 export async function POST (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("admin.master_data.manage");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
-
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const currentUser = authCheck.user!;
 
     const body = await req.json();
     const { category, code, name, description, attributes, sortOrder, isActive } = body;

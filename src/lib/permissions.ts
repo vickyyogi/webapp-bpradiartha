@@ -27,6 +27,26 @@ const MFA_REQUIRED_RESPONSE = () =>
   );
 
 /**
+ * Gerbang kebijakan sandi (Tahap 1B-3 — P0.1).
+ *
+ * Akun yang sandinya tidak memenuhi kebijakan (mis. sandi lama yang di-hash saat
+ * migrasi) wajib menggantinya di /account/password sebelum memakai API berizin.
+ */
+function passwordChangeRequired(user: { mustChangePassword: boolean }): boolean {
+  return user.mustChangePassword;
+}
+
+const PASSWORD_CHANGE_RESPONSE = () =>
+  NextResponse.json(
+    {
+      error:
+        "Kata sandi akun ini wajib diganti terlebih dahulu karena tidak memenuhi kebijakan. Buka /account/password.",
+      code: "PASSWORD_CHANGE_REQUIRED",
+    },
+    { status: 403 }
+  );
+
+/**
  * Checks if a user has a specific permission code attached to any of their assigned roles.
  */
 export async function hasPermission(
@@ -102,6 +122,11 @@ export async function requireAnyPermission(permissionCodes: string[]) {
     return { authorized: false as const, response: MFA_REQUIRED_RESPONSE(), user };
   }
 
+  // Tahap 1B-3: sandi belum memenuhi kebijakan => wajib diganti lebih dahulu.
+  if (passwordChangeRequired(user)) {
+    return { authorized: false as const, response: PASSWORD_CHANGE_RESPONSE(), user };
+  }
+
   for (const code of permissionCodes) {
     if (await hasPermission(user.email, code)) {
       return { authorized: true as const, response: null, user };
@@ -149,6 +174,11 @@ export async function requireAuthAndPermission(permissionCode: string) {
   // Tahap 1B: peran wajib-MFA belum mendaftar TOTP => tolak akses API.
   if (mfaSetupRequired(user)) {
     return { authorized: false as const, response: MFA_REQUIRED_RESPONSE(), user };
+  }
+
+  // Tahap 1B-3: sandi belum memenuhi kebijakan => wajib diganti lebih dahulu.
+  if (passwordChangeRequired(user)) {
+    return { authorized: false as const, response: PASSWORD_CHANGE_RESPONSE(), user };
   }
 
   // Allow bypass for system admin / initial setup if permission check passes

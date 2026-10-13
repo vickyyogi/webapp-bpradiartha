@@ -292,7 +292,7 @@ export function CreditApplicationDetailClientView({
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Pemohon: <span className="font-medium text-foreground">{app.applicant?.fullName}</span> • Kantor: {app.branch?.name || "-"} • Tanggal: {app.submissionDate ? new Date(app.submissionDate).toLocaleDateString("id-ID") : "-"}
+              Pemohon: <span className="font-medium text-foreground">{app.customer?.legalName}</span> • Kantor: {app.branch?.name || "-"} • Tanggal: {app.submissionDate ? new Date(app.submissionDate).toLocaleDateString("id-ID") : "-"}
             </p>
           </div>
         </div>
@@ -511,15 +511,15 @@ export function CreditApplicationDetailClientView({
             <CardContent className="space-y-4 text-sm">
               <div className="grid grid-cols-2 gap-2 pb-2 border-b">
                 <span className="text-muted-foreground">Nama Debitur:</span>
-                <span className="font-semibold">{app.applicant?.fullName || "-"}</span>
+                <span className="font-semibold">{app.customer?.legalName || "-"}</span>
               </div>
               <div className="grid grid-cols-2 gap-2 pb-2 border-b">
                 <span className="text-muted-foreground">Kontak Telepon:</span>
-                <span className="font-semibold">{app.applicant?.phone || "-"}</span>
+                <span className="font-semibold">{app.customer?.phone || "-"}</span>
               </div>
               <div className="grid grid-cols-2 gap-2 pb-2 border-b">
                 <span className="text-muted-foreground">Email:</span>
-                <span className="font-semibold">{app.applicant?.email || "-"}</span>
+                <span className="font-semibold">{app.customer?.email || "-"}</span>
               </div>
               <div className="grid grid-cols-2 gap-2 pb-2 border-b">
                 <span className="text-muted-foreground">Kantor Cabang:</span>

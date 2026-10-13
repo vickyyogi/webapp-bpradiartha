@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma } from "@prisma/client";
+import { buildScopeFilter, resolveScopeLevel, toScopeUser } from "@/lib/access-scope";
 import { CreditApplicationsClientView } from "./CreditApplicationsClientView";
 import { Metadata } from "next";
 
@@ -10,19 +12,49 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+const CREDIT_ASSIGNMENT_FIELDS = [
+  "assignedMarketingOfficerId",
+  "assignedAnalystId",
+  "assignedSurveyOfficerId",
+  "decisionMakerId",
+];
+
 export default async function CreditApplicationsPage() {
   const session = await getServerSession(authOptions);
   const currentUser = await db.user.findUnique({
     where: { email: session?.user?.email || "" },
+    include: { userRoles: { include: { role: true } } },
   });
 
-  const orgFilter = currentUser?.organizationId ? { organizationId: currentUser.organizationId } : {};
+  if (!currentUser) {
+    return <CreditApplicationsClientView initialApplications={[]} users={[]} branches={[]} customers={[]} />;
+  }
 
-  const [applications, users, branches, leads, documents] = await Promise.all([
+  const scopeUser = toScopeUser(currentUser);
+  const organizationId = currentUser.organizationId;
+  const orgWide = resolveScopeLevel(scopeUser) === "ORGANIZATION";
+
+  const applicationScope = buildScopeFilter(scopeUser, { assignmentFields: CREDIT_ASSIGNMENT_FIELDS }) as Prisma.CreditApplicationWhereInput;
+  const customerScope = buildScopeFilter(scopeUser, { assignmentFields: ["createdById"] }) as Prisma.CustomerWhereInput;
+  const officerScope: Prisma.UserWhereInput = orgWide
+    ? {}
+    : { OR: [{ branchId: currentUser.branchId ?? undefined }, { id: currentUser.id }] };
+
+  const [applications, users, branches, leads, documents, customers] = await Promise.all([
     db.creditApplication.findMany({
-      where: orgFilter,
+      where: applicationScope,
       include: {
-        applicant: { select: { id: true, fullName: true, email: true, phone: true } },
+        customer: {
+          select: {
+            id: true,
+            customerNumber: true,
+            legalName: true,
+            customerType: true,
+            identityNumber: true,
+            phone: true,
+            email: true,
+          },
+        },
         branch: { select: { id: true, name: true, code: true } },
         marketingOfficer: { select: { id: true, fullName: true, email: true } },
         analyst: { select: { id: true, fullName: true, email: true } },
@@ -31,54 +63,28 @@ export default async function CreditApplicationsPage() {
       orderBy: { createdAt: "desc" },
     }),
     db.user.findMany({
-      where: {
-        ...(currentUser?.organizationId ? { organizationId: currentUser.organizationId } : {}),
-        isActive: true,
-      },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-      },
+      where: { organizationId, isActive: true, ...officerScope },
+      select: { id: true, fullName: true, email: true },
       orderBy: { fullName: "asc" },
     }),
     db.branch.findMany({
-      where: {
-        ...(currentUser?.organizationId ? { organizationId: currentUser.organizationId } : {}),
-        isActive: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        code: true,
-      },
+      where: { organizationId, isActive: true, ...(orgWide ? {} : { id: currentUser.branchId ?? "__none__" }) },
+      select: { id: true, name: true, code: true },
       orderBy: { name: "asc" },
     }),
     db.lead.findMany({
-      where: orgFilter,
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        address: true,
-        source: true,
-        productInterest: true,
-        notes: true,
-      },
+      where: { organizationId, ...(orgWide ? {} : { branchId: currentUser.branchId ?? "__none__" }) },
+      select: { id: true, name: true, phone: true, address: true, source: true, productInterest: true, notes: true },
       orderBy: { createdAt: "desc" },
     }),
     db.document.findMany({
-      where: {
-        ...(currentUser?.organizationId ? { organizationId: currentUser.organizationId } : {}),
-        ownerType: "CREDIT_APPLICATION",
-        documentType: "KTP",
-      },
-      select: {
-        id: true,
-        ownerId: true,
-        fileName: true,
-        filePath: true,
-      },
+      where: { organizationId, ownerType: "CREDIT_APPLICATION", documentType: "KTP" },
+      select: { id: true, ownerId: true, fileName: true, filePath: true },
+    }),
+    db.customer.findMany({
+      where: { ...customerScope, isActive: true },
+      select: { id: true, customerNumber: true, legalName: true, customerType: true, identityNumber: true, phone: true },
+      orderBy: { legalName: "asc" },
     }),
   ]);
 
@@ -89,6 +95,7 @@ export default async function CreditApplicationsPage() {
       branches={branches}
       leads={JSON.parse(JSON.stringify(leads))}
       documents={JSON.parse(JSON.stringify(documents))}
+      customers={JSON.parse(JSON.stringify(customers))}
     />
   );
 }

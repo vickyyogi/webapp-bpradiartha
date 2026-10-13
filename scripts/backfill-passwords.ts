@@ -15,7 +15,7 @@
  *   npx ts-node --project scripts/tsconfig.json scripts/backfill-passwords.ts --apply    # tulis ke DB
  */
 import { PrismaClient } from "@prisma/client";
-import { hashPassword, isBcryptHash, KNOWN_STATIC_DEFAULTS, byteLength, MAX_PASSWORD_BYTES } from "../src/lib/password";
+import { hashPassword, isBcryptHash, validatePasswordPolicy, KNOWN_STATIC_DEFAULTS, byteLength, MAX_PASSWORD_BYTES } from "../src/lib/password";
 import { maskEmail } from "../src/lib/privacy";
 
 const prisma = new PrismaClient();
@@ -108,7 +108,10 @@ async function main(): Promise<void> {
 
   if (toHash.length) {
     console.log("Akun yang akan di-hash (email disamarkan):");
-    for (const plan of toHash) console.log(`  - ${maskEmail(plan.email)} [${plan.reason}]`);
+    for (const plan of toHash) {
+      const wajibGanti = plan.value ? !validatePasswordPolicy(plan.value, { email: plan.email }).ok : false;
+      console.log(`  - ${maskEmail(plan.email)} [${plan.reason}]${wajibGanti ? " [wajib ganti sandi]" : ""}`);
+    }
   }
   if (toLock.length) {
     console.log("\nAkun yang akan dikunci (tidak dapat login):");
@@ -122,20 +125,26 @@ async function main(): Promise<void> {
 
   let hashed = 0;
   let locked = 0;
+  let flagged = 0;
 
   for (const plan of plans) {
     if (plan.action === "hash" && plan.value) {
       const safeValue = truncateToBytes(plan.value, MAX_PASSWORD_BYTES);
+      // Tahap 1B-3: sandi lama yang tidak memenuhi kebijakan baru ditandai supaya
+      // pengguna wajib menggantinya sebelum memakai aplikasi.
+      const wajibGanti = !validatePasswordPolicy(safeValue, { email: plan.email }).ok;
       await prisma.user.update({
         where: { id: plan.id },
         data: {
           passwordHash: await hashPassword(safeValue),
           passwordChangedAt: new Date(),
+          mustChangePassword: wajibGanti,
           failedLoginAttempts: 0,
           lockedUntil: null,
         },
       });
       hashed += 1;
+      if (wajibGanti) flagged += 1;
     } else if (plan.action === "lock") {
       await prisma.user.update({
         where: { id: plan.id },
@@ -150,7 +159,7 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log(`\nSELESAI: ${hashed} akun di-hash, ${locked} akun dikunci.`);
+  console.log(`\nSELESAI: ${hashed} akun di-hash (${flagged} di antaranya ditandai wajib ganti sandi), ${locked} akun dikunci.`);
 }
 
 main()

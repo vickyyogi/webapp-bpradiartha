@@ -29,7 +29,7 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const existing = await db.masterItem.findUnique({ where: { id } });
+    const existing = await db.masterItem.findFirst({ where: { id, organizationId: currentUser.organizationId } });
     if (!existing) {
       return NextResponse.json({ error: "Item master data tidak ditemukan" }, { status: 404 });
     }
@@ -91,7 +91,7 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    const existing = await db.masterItem.findUnique({ where: { id } });
+    const existing = await db.masterItem.findFirst({ where: { id, organizationId: currentUser.organizationId } });
     if (!existing) {
       return NextResponse.json({ error: "Item master data tidak ditemukan" }, { status: 404 });
     }

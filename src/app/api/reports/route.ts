@@ -1,53 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
+import { buildScopeFilter, toScopeUser } from "@/lib/access-scope";
 
 export async function GET (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const authCheck = await requireAuthAndPermission("report.management.view");
-    if (!authCheck.authorized) {
-      return authCheck.response;
-    }
-
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
     const { searchParams } = new URL(req.url);
     const domain = searchParams.get("domain") || "ALL"; // ALL, CREDIT, FIELD, PURCHASING, INVENTORY, ASSET
     const format = searchParams.get("format"); // "csv" or json
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
 
-    const dateFilter = {};
+    // Ekspor CSV memuat data sensitif lintas entitas → butuh izin ekspor tersendiri.
+    const requiredPermission = format === "csv" ? "report.management.export" : "report.management.view";
+    const authCheck = await requireAuthAndPermission(requiredPermission);
+    if (!authCheck.authorized) {
+      return authCheck.response;
+    }
+    const currentUser = authCheck.user!;
+    const scopeUser = toScopeUser(currentUser);
+
+    const dateFilter: Prisma.DateTimeFilter = {};
     if (startDate) dateFilter.gte = new Date(startDate);
     if (endDate) {
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
       dateFilter.lte = end;
     }
+    const hasDate = Boolean(startDate || endDate);
 
-    const orgId = currentUser.organizationId;
+    // Cakupan organisasi/cabang/penugasan untuk setiap entitas.
+    const creditScope = buildScopeFilter(scopeUser, {
+      assignmentFields: ["assignedMarketingOfficerId", "assignedAnalystId", "assignedSurveyOfficerId", "decisionMakerId"],
+    }) as Prisma.CreditApplicationWhereInput;
+    const fieldScope = buildScopeFilter(scopeUser, { assignmentFields: ["assignedOfficerId"] }) as Prisma.FieldTaskWhereInput;
+    const prScope = buildScopeFilter(scopeUser, { assignmentFields: ["requesterId"] }) as Prisma.PurchaseRequestWhereInput;
+    const poScope = buildScopeFilter(scopeUser, { assignmentFields: ["createdById"] }) as Prisma.PurchaseOrderWhereInput;
+    const invScope = buildScopeFilter(scopeUser, { assignmentFields: [] }) as Prisma.InventoryItemWhereInput;
+    const assetScope = buildScopeFilter(scopeUser, { assignmentFields: ["currentHolderId"] }) as Prisma.AssetWhereInput;
 
     // 1. Credit Data
     const creditApps = await db.creditApplication.findMany({
-      where: {
-        organizationId: orgId,
-        ...(startDate || endDate ? { createdAt: dateFilter } : {}),
-      },
+      where: { ...creditScope, ...(hasDate ? { createdAt: dateFilter } : {}) },
       include: {
-        applicant: { select: { fullName: true, phone: true } },
+        customer: { select: { legalName: true, phone: true } },
         marketingOfficer: { select: { fullName: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -55,22 +52,14 @@ export async function GET (req: NextRequest) {
 
     // 2. Field Tasks
     const fieldTasks = await db.fieldTask.findMany({
-      where: {
-        organizationId: orgId,
-        ...(startDate || endDate ? { createdAt: dateFilter } : {}),
-      },
-      include: {
-        assignedOfficer: { select: { fullName: true } },
-      },
+      where: { ...fieldScope, ...(hasDate ? { createdAt: dateFilter } : {}) },
+      include: { assignedOfficer: { select: { fullName: true } } },
       orderBy: { createdAt: "desc" },
     });
 
     // 3. Purchasing (PR & PO)
     const purchaseRequests = await db.purchaseRequest.findMany({
-      where: {
-        organizationId: orgId,
-        ...(startDate || endDate ? { createdAt: dateFilter } : {}),
-      },
+      where: { ...prScope, ...(hasDate ? { createdAt: dateFilter } : {}) },
       include: {
         requester: { select: { fullName: true } },
         department: { select: { name: true } },
@@ -79,10 +68,7 @@ export async function GET (req: NextRequest) {
     });
 
     const purchaseOrders = await db.purchaseOrder.findMany({
-      where: {
-        organizationId: orgId,
-        ...(startDate || endDate ? { createdAt: dateFilter } : {}),
-      },
+      where: { ...poScope, ...(hasDate ? { createdAt: dateFilter } : {}) },
       include: {
         vendor: { select: { name: true, category: true } },
         createdBy: { select: { fullName: true } },
@@ -92,15 +78,13 @@ export async function GET (req: NextRequest) {
 
     // 4. Inventory & Assets
     const inventoryItems = await db.inventoryItem.findMany({
-      where: { organizationId: orgId, isActive: true },
+      where: { ...invScope, isActive: true },
       orderBy: { name: "asc" },
     });
 
     const assets = await db.asset.findMany({
-      where: { organizationId: orgId },
-      include: {
-        currentHolder: { select: { fullName: true } },
-      },
+      where: { ...assetScope },
+      include: { currentHolder: { select: { fullName: true } } },
       orderBy: { createdAt: "desc" },
     });
 
@@ -112,7 +96,7 @@ export async function GET (req: NextRequest) {
       if (domain === "CREDIT") {
         csvContent = "No. Aplikasi,Pemohon,Produk,Nominal Diajukan,Nominal Disetujui,Nominal Realisasi,Status,Tanggal Pengajuan\n";
         creditApps.forEach((c) => {
-          csvContent += `"${c.applicationNumber}","${c.applicant?.fullName || "-"}","${c.product || "-"}","${c.requestedAmount || 0}","${c.approvedAmount || 0}","${c.realizationAmount || 0}","${c.status}","${new Date(c.createdAt).toLocaleDateString("id-ID")}"\n`;
+          csvContent += `"${c.applicationNumber}","${c.customer?.legalName || "-"}","${c.product || "-"}","${c.requestedAmount || 0}","${c.approvedAmount || 0}","${c.realizationAmount || 0}","${c.status}","${new Date(c.createdAt).toLocaleDateString("id-ID")}"\n`;
         });
       } else if (domain === "PURCHASING") {
         csvContent = "No. PO,Vendor,Tanggal PO,Syarat Bayar,Subtotal,PPN 11%,Total Nilai,Status\n";

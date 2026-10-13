@@ -1,36 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
+import { buildScopeFilter, isBranchAllowed, toScopeUser } from "@/lib/access-scope";
 
 export async function GET (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("inventory.item.view");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
-
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const currentUser = authCheck.user!;
 
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search");
     const category = searchParams.get("category");
     const lowStock = searchParams.get("lowStock") === "true";
 
-    const whereClause = {
-      organizationId: currentUser.organizationId,
+    const whereClause: Prisma.InventoryItemWhereInput = {
+      ...(buildScopeFilter(toScopeUser(currentUser), { assignmentFields: [] }) as Prisma.InventoryItemWhereInput),
       isActive: true,
     };
 
@@ -81,23 +69,11 @@ export async function GET (req: NextRequest) {
 
 export async function POST (req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const authCheck = await requireAuthAndPermission("inventory.item.create");
     if (!authCheck.authorized) {
       return authCheck.response;
     }
-
-    const currentUser = await db.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const currentUser = authCheck.user!;
 
     const body = await req.json();
     const {
@@ -117,6 +93,13 @@ export async function POST (req: NextRequest) {
       return NextResponse.json(
         { error: "Nama barang, kategori, dan satuan wajib diisi." },
         { status: 400 }
+      );
+    }
+
+    if (branchId && !isBranchAllowed(toScopeUser(currentUser), branchId)) {
+      return NextResponse.json(
+        { error: "Anda tidak berwenang menambah barang pada cabang tersebut.", code: "BRANCH_FORBIDDEN" },
+        { status: 403 }
       );
     }
 

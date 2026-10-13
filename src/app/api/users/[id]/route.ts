@@ -42,6 +42,26 @@ export async function PUT(
       }
     }
 
+    const existing = await db.user.findFirst({
+      where: { id, organizationId: currentUser.organizationId },
+      include: { userRoles: { select: { roleId: true } } },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Pengguna tidak ditemukan." }, { status: 404 });
+    }
+
+    // Mutasi pegawai / perubahan role / penonaktifan → cabut sesi lama segera.
+    const roleChanged =
+      roleIds !== undefined &&
+      (() => {
+        const before = new Set(existing.userRoles.map((ur) => ur.roleId));
+        const after = new Set<string>(roleIds);
+        return before.size !== after.size || [...before].some((r) => !after.has(r));
+      })();
+    const branchChanged = branchId !== undefined && (branchId || null) !== existing.branchId;
+    const deactivated = isActive === false && existing.isActive;
+    const revokeSessions = roleChanged || branchChanged || deactivated;
+
     const dataToUpdate = {
       email,
       fullName,
@@ -50,6 +70,7 @@ export async function PUT(
       branchId: branchId || null,
       departmentId: departmentId || null,
       isActive,
+      ...(revokeSessions ? { sessionsValidFrom: new Date() } : {}),
       ...(password
         ? { passwordHash: await hashPassword(password), passwordChangedAt: new Date() }
         : {}),

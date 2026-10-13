@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
-import { LeadStatus } from "@prisma/client";
+import { Prisma, LeadStatus } from "@prisma/client";
+import { buildScopeFilter, isBranchAllowed, toScopeUser } from "@/lib/access-scope";
 
 export async function GET (req: NextRequest) {
   try {
@@ -29,8 +30,8 @@ export async function GET (req: NextRequest) {
     const status = searchParams.get("status");
     const search = searchParams.get("search");
 
-    const whereClause = {
-      organizationId: currentUser.organizationId,
+    const whereClause: Prisma.LeadWhereInput = {
+      ...(buildScopeFilter(toScopeUser(currentUser), { assignmentFields: ["assignedOfficerId"] }) as Prisma.LeadWhereInput),
     };
 
     if (status && Object.values(LeadStatus).includes(status as LeadStatus)) {
@@ -110,6 +111,26 @@ export async function POST (req: NextRequest) {
         { error: "Sumber prospek (lead source) wajib dipilih" },
         { status: 400 }
       );
+    }
+
+    const scopeUser = toScopeUser(currentUser);
+    if (branchId && !isBranchAllowed(scopeUser, branchId)) {
+      return NextResponse.json(
+        { error: "Anda tidak berwenang membuat prospek pada cabang tersebut.", code: "BRANCH_FORBIDDEN" },
+        { status: 403 }
+      );
+    }
+    if (assignedOfficerId) {
+      const officer = await db.user.findFirst({
+        where: { id: assignedOfficerId, organizationId: currentUser.organizationId, isActive: true },
+        select: { branchId: true },
+      });
+      if (!officer || !isBranchAllowed(scopeUser, officer.branchId)) {
+        return NextResponse.json(
+          { error: "Petugas yang ditugaskan berada di luar cabang Anda.", code: "ASSIGNEE_FORBIDDEN" },
+          { status: 403 }
+        );
+      }
     }
 
     const validatedStatus =
