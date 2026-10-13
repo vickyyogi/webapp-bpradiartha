@@ -22,7 +22,8 @@ export type DocumentItem = {
   ownerId: string;
   documentType: "KTP" | "KK" | "INCOME_PROOF" | "BUSINESS_DOC" | "SURVEY_PHOTO" | "COLLATERAL_DOC" | "APPROVAL_DOC" | "OTHER";
   fileName: string;
-  filePath: string;
+  /** URL unduh terotorisasi; berkas tidak pernah disajikan dari jalur publik. */
+  downloadUrl: string;
   fileExt: string | null;
   fileSize: number;
   mimeType: string;
@@ -183,7 +184,8 @@ export function DocumentsClientView({
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Arsip Dokumen ({filteredDocs.length})</CardTitle>
           <CardDescription>
-            Dokumen disimpan dengan enkripsi metadata dan validasi tipe berkas aman sesuai SOP perbankan.
+            Dokumen disimpan pada penyimpanan privat di luar web root; berkas hanya dapat diambil melalui
+            endpoint unduh yang memeriksa sesi, izin, dan cakupan akses Anda.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -233,7 +235,7 @@ export function DocumentsClientView({
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <a href={doc.filePath} target="_blank" rel="noopener noreferrer">
+                          <a href={doc.downloadUrl} target="_blank" rel="noopener noreferrer">
                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Buka / Unduh Berkas">
                               <Download className="h-4 w-4 text-primary" />
                             </Button>

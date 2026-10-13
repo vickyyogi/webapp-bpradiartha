@@ -20,71 +20,38 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   CircleDot,
-  Building,
 } from "lucide-react";
+import type { NavSectionConfig } from "@/lib/navigation";
 import { Button } from "@/components/ui/button";
 import { LogoutButton } from "@/app/(dashboard)/LogoutButton";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { ThemeToggle } from "@/components/public/ThemeToggle";
 
-export type MenuVisibility = {
-  showCrm: boolean;
-  showCredit: boolean;
-  showField: boolean;
-  showDocuments: boolean;
-  showInventory: boolean;
-  showPurchasing: boolean;
-  showReports: boolean;
-  showAudit: boolean;
-  showAdmin: boolean;
-  showAdminUsers: boolean;
-  showAdminRoles: boolean;
-  showAdminMaster: boolean;
-  showAdminBranches?: boolean;
-  showAdminDepartments?: boolean;
-  showAdminCms: boolean;
+const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  dashboard: LayoutDashboard,
+  crm: Users,
+  credit: CreditCard,
+  field: MapPin,
+  documents: FileText,
+  inventory: Package,
+  purchasing: ShoppingBag,
+  reports: BarChart3,
+  audit: ShieldCheck,
+  admin: Settings,
 };
 
 interface Props {
   userName: string;
   userRoleLabel: string;
-  menuVisibility: MenuVisibility;
+  /** Navigasi yang sudah disaring server sesuai permission + cakupan pengguna. */
+  navSections: NavSectionConfig[];
   children: React.ReactNode;
 }
-
-type NavLinkItem = {
-  type: "link";
-  title: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  visible?: boolean;
-};
-
-type NavDropdownItem = {
-  type: "dropdown";
-  key: string;
-  title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  basePath: string;
-  visible?: boolean;
-  children: {
-    title: string;
-    href: string;
-    visible?: boolean;
-  }[];
-};
-
-type NavItem = NavLinkItem | NavDropdownItem;
-
-type NavSection = {
-  label: string;
-  items: NavItem[];
-};
 
 export function DashboardShell({
   userName,
   userRoleLabel,
-  menuVisibility,
+  navSections,
   children,
 }: Props) {
   const pathname = usePathname();
@@ -109,44 +76,23 @@ export function DashboardShell({
     setIsMobileOpen((prev) => !prev);
   };
 
-  const {
-    showCrm,
-    showCredit,
-    showField,
-    showDocuments,
-    showInventory,
-    showPurchasing,
-    showReports,
-    showAudit,
-    showAdmin,
-    showAdminUsers,
-    showAdminRoles,
-    showAdminMaster,
-    showAdminBranches = true,
-    showAdminDepartments = true,
-    showAdminCms,
-  } = menuVisibility;
-
   // Toggle Dropdowns State
-  const [openDropdowns, setOpenDropdowns] = useState<Record<string, boolean>>({
-    crm: pathname.startsWith("/crm"),
-    credit: pathname.startsWith("/credit"),
-    inventory: pathname.startsWith("/inventory"),
-    purchasing: pathname.startsWith("/purchasing"),
-    admin: pathname.startsWith("/admin"),
-  });
+  const [openDropdowns, setOpenDropdowns] = useState<Record<string, boolean>>({});
 
   // Automatically expand dropdown for current active route
   useEffect(() => {
-    setOpenDropdowns((prev) => ({
-      ...prev,
-      crm: prev.crm || pathname.startsWith("/crm"),
-      credit: prev.credit || pathname.startsWith("/credit"),
-      inventory: prev.inventory || pathname.startsWith("/inventory"),
-      purchasing: prev.purchasing || pathname.startsWith("/purchasing"),
-      admin: prev.admin || pathname.startsWith("/admin"),
-    }));
-  }, [pathname]);
+    setOpenDropdowns((prev) => {
+      const next = { ...prev };
+      for (const section of navSections) {
+        for (const item of section.items) {
+          if (item.type === "dropdown" && item.basePath && pathname.startsWith(item.basePath)) {
+            next[item.key] = true;
+          }
+        }
+      }
+      return next;
+    });
+  }, [pathname, navSections]);
 
   const toggleDropdown = (key: string) => {
     setOpenDropdowns((prev) => ({
@@ -158,151 +104,17 @@ export function DashboardShell({
   const isExactActive = (path: string) => pathname === path;
   const isModuleActive = (basePath: string) => pathname.startsWith(basePath);
 
-  // Categorized Navigation Sections
-  const navSections: NavSection[] = [
-    {
-      label: "Utama",
-      items: [
-        {
-          type: "link",
-          title: "Dashboard",
-          href: "/dashboard",
-          icon: LayoutDashboard,
-        },
-      ],
-    },
-    {
-      label: "Operasional & Kredit",
-      items: [
-        {
-          type: "dropdown",
-          key: "crm",
-          title: "CRM & Prospek",
-          icon: Users,
-          basePath: "/crm",
-          visible: showCrm,
-          children: [
-            { title: "Ringkasan CRM", href: "/crm" },
-            { title: "Data Prospek (Leads)", href: "/crm/leads" },
-            { title: "Data Nasabah (Customers)", href: "/crm/customers" },
-          ],
-        },
-        {
-          type: "dropdown",
-          key: "credit",
-          title: "Kredit & Analisis",
-          icon: CreditCard,
-          basePath: "/credit",
-          visible: showCredit,
-          children: [
-            { title: "Pipeline & Analisis", href: "/credit" },
-            { title: "Pengajuan Kredit", href: "/credit/applications" },
-            { title: "Analisa SLIK OJK", href: "/credit/slik-analyzer" },
-          ],
-        },
-        {
-          type: "link",
-          title: "Petugas Lapangan",
-          href: "/field",
-          icon: MapPin,
-          visible: showField,
-        },
-        {
-          type: "link",
-          title: "Dokumen Digital",
-          href: "/documents",
-          icon: FileText,
-          visible: showDocuments,
-        },
-      ],
-    },
-    {
-      label: "Logistik & Aset",
-      items: [
-        {
-          type: "dropdown",
-          key: "inventory",
-          title: "Inventaris & Aset",
-          icon: Package,
-          basePath: "/inventory",
-          visible: showInventory,
-          children: [
-            { title: "Ringkasan Aset & Stok", href: "/inventory" },
-            { title: "Stok Barang & ATK", href: "/inventory/items" },
-            { title: "Aset Operasional", href: "/inventory/assets" },
-            { title: "Pemeliharaan Aset", href: "/inventory/maintenance" },
-          ],
-        },
-        {
-          type: "dropdown",
-          key: "purchasing",
-          title: "Pengadaan (Purchasing)",
-          icon: ShoppingBag,
-          basePath: "/purchasing",
-          visible: showPurchasing,
-          children: [
-            { title: "Ringkasan Pengadaan", href: "/purchasing" },
-            { title: "Pengajuan (PR)", href: "/purchasing/requests" },
-            { title: "Pesanan Pembelian (PO)", href: "/purchasing/orders" },
-            { title: "Penerimaan Barang (GRN)", href: "/purchasing/receipts" },
-            { title: "Rekanan & Vendor", href: "/purchasing/vendors" },
-          ],
-        },
-      ],
-    },
-    {
-      label: "Pengawasan & Audit",
-      items: [
-        {
-          type: "link",
-          title: "Laporan & Analitika",
-          href: "/reports",
-          icon: BarChart3,
-          visible: showReports,
-        },
-        {
-          type: "link",
-          title: "Audit Trail Log",
-          href: "/audit",
-          icon: ShieldCheck,
-          visible: showAudit,
-        },
-      ],
-    },
-    {
-      label: "Administrasi Sistem",
-      items: [
-        {
-          type: "dropdown",
-          key: "admin",
-          title: "Admin & Pengaturan",
-          icon: Settings,
-          basePath: "/admin",
-          visible: showAdmin,
-          children: [
-            { title: "Panel Admin", href: "/admin" },
-            { title: "Pengguna (Users)", href: "/admin/users", visible: showAdminUsers },
-            { title: "Peran & Izin (Roles)", href: "/admin/roles", visible: showAdminRoles },
-            { title: "Master Data", href: "/admin/master-data", visible: showAdminMaster },
-            { title: "Kantor Cabang", href: "/admin/branches", visible: showAdminBranches },
-            { title: "Departemen & Divisi", href: "/admin/departments", visible: showAdminDepartments },
-            { title: "CMS & Konten Website", href: "/admin/cms", visible: showAdminCms },
-          ],
-        },
-      ],
-    },
-  ];
-
   // Helper renderer for nav item
-  const renderNavItem = (item: NavItem, onNavigate?: () => void) => {
-    if (item.visible === false) return null;
+  const renderNavItem = (item: NavSectionConfig["items"][number], onNavigate?: () => void) => {
+    const Icon = NAV_ICONS[item.icon] ?? CircleDot;
 
     if (item.type === "link") {
-      const active = isExactActive(item.href);
+      const href = item.href || "/";
+      const active = isExactActive(href);
       return (
         <Link
-          key={item.href}
-          href={item.href}
+          key={item.key}
+          href={href}
           onClick={onNavigate}
           className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all group ${
             active
@@ -310,7 +122,7 @@ export function DashboardShell({
               : "text-foreground/75 hover:bg-primary-soft hover:text-primary"
           }`}
         >
-          <item.icon
+          <Icon
             className={`h-4 w-4 shrink-0 transition-colors ${
               active ? "text-primary-foreground" : "text-muted-foreground group-hover:text-primary"
             }`}
@@ -320,70 +132,67 @@ export function DashboardShell({
       );
     }
 
-    if (item.type === "dropdown") {
-      const isParentActive = isModuleActive(item.basePath);
-      const isDropdownOpen = !!openDropdowns[item.key];
-      const validChildren = item.children.filter((c) => c.visible !== false);
+    const basePath = item.basePath || "/";
+    const isParentActive = isModuleActive(basePath);
+    const isDropdownOpen = !!openDropdowns[item.key];
+    const children = item.children ?? [];
 
-      if (validChildren.length === 0) return null;
+    if (children.length === 0) return null;
 
-      return (
-        <div key={item.key} className="space-y-1">
-          <button
-            type="button"
-            onClick={() => toggleDropdown(item.key)}
-            className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium transition-all cursor-pointer select-none group ${
-              isParentActive
-                ? "bg-primary-soft text-primary font-bold border border-primary/20"
-                : "text-foreground/75 hover:bg-primary-soft hover:text-primary"
-            }`}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <item.icon
-                className={`h-4 w-4 shrink-0 transition-colors ${
-                  isParentActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"
-                }`}
-              />
-              <span className="truncate">{item.title}</span>
-            </div>
-            <ChevronDown
-              className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${
-                isDropdownOpen ? "rotate-180 text-primary" : "text-muted-foreground group-hover:text-primary"
+    return (
+      <div key={item.key} className="space-y-1">
+        <button
+          type="button"
+          onClick={() => toggleDropdown(item.key)}
+          className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium transition-all cursor-pointer select-none group ${
+            isParentActive
+              ? "bg-primary-soft text-primary font-bold border border-primary/20"
+              : "text-foreground/75 hover:bg-primary-soft hover:text-primary"
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Icon
+              className={`h-4 w-4 shrink-0 transition-colors ${
+                isParentActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"
               }`}
             />
-          </button>
+            <span className="truncate">{item.title}</span>
+          </div>
+          <ChevronDown
+            className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${
+              isDropdownOpen ? "rotate-180 text-primary" : "text-muted-foreground group-hover:text-primary"
+            }`}
+          />
+        </button>
 
-          {isDropdownOpen && (
-            <div className="relative pl-3 ml-3 my-1 space-y-0.5 border-l-2 border-border/60 animate-in fade-in slide-in-from-top-1 duration-150">
-              {validChildren.map((child) => {
-                const isChildActive = pathname === child.href;
-                return (
-                  <Link
-                    key={child.href}
-                    href={child.href}
-                    onClick={onNavigate}
-                    className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-all ${
-                      isChildActive
-                        ? "text-primary font-bold bg-primary-soft border-l-2 border-primary -ml-[14px] pl-[20px]"
-                        : "text-muted-foreground hover:text-primary hover:bg-primary-soft/50"
+        {isDropdownOpen && (
+          <div className="relative pl-3 ml-3 my-1 space-y-0.5 border-l-2 border-border/60 animate-in fade-in slide-in-from-top-1 duration-150">
+            {children.map((child) => {
+              const isChildActive = pathname === child.href;
+              return (
+                <Link
+                  key={child.key}
+                  href={child.href}
+                  onClick={onNavigate}
+                  className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-all ${
+                    isChildActive
+                      ? "text-primary font-bold bg-primary-soft border-l-2 border-primary -ml-[14px] pl-[20px]"
+                      : "text-muted-foreground hover:text-primary hover:bg-primary-soft/50"
+                  }`}
+                >
+                  <CircleDot
+                    className={`h-1.5 w-1.5 shrink-0 ${
+                      isChildActive ? "text-primary" : "text-muted-foreground/40"
                     }`}
-                  >
-                    <CircleDot
-                      className={`h-1.5 w-1.5 shrink-0 ${
-                        isChildActive ? "text-primary" : "text-muted-foreground/40"
-                      }`}
-                    />
-                    <span className="truncate">{child.title}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    return null;
+                  />
+                  <span className="truncate">{child.title}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -391,7 +200,6 @@ export function DashboardShell({
       {/* Header */}
       <header className="sticky top-0 z-50 flex h-16 items-center gap-3 border-b border-border bg-background/95 backdrop-blur px-4 md:px-6 shadow-2xs">
         {/* Toggle Button for Desktop */}
-        
         <Button
           variant="ghost"
           size="icon"
@@ -440,7 +248,6 @@ export function DashboardShell({
             </span>
           </Link>
           <LogoutButton />
-          
         </div>
       </header>
 
@@ -452,21 +259,16 @@ export function DashboardShell({
           }`}
         >
           <div className="w-64 h-full overflow-y-auto p-3 space-y-4">
-            {navSections.map((section) => {
-              const visibleItems = section.items.filter((item) => item.visible !== false);
-              if (visibleItems.length === 0) return null;
-
-              return (
-                <div key={section.label} className="space-y-1">
-                  <div className="px-3 pt-2 pb-1 text-[10px] font-bold tracking-wider text-muted-foreground/70 uppercase">
-                    {section.label}
-                  </div>
-                  <nav className="grid gap-1">
-                    {visibleItems.map((item) => renderNavItem(item))}
-                  </nav>
+            {navSections.map((section) => (
+              <div key={section.label} className="space-y-1">
+                <div className="px-3 pt-2 pb-1 text-[10px] font-bold tracking-wider text-muted-foreground/70 uppercase">
+                  {section.label}
                 </div>
-              );
-            })}
+                <nav className="grid gap-1">
+                  {section.items.map((item) => renderNavItem(item))}
+                </nav>
+              </div>
+            ))}
           </div>
         </aside>
 
@@ -497,23 +299,18 @@ export function DashboardShell({
               </div>
 
               <div className="space-y-4 flex-1">
-                {navSections.map((section) => {
-                  const visibleItems = section.items.filter((item) => item.visible !== false);
-                  if (visibleItems.length === 0) return null;
-
-                  return (
-                    <div key={section.label} className="space-y-1">
-                      <div className="px-3 pt-2 pb-1 text-[10px] font-bold tracking-wider text-muted-foreground/70 uppercase">
-                        {section.label}
-                      </div>
-                      <nav className="grid gap-1">
-                        {visibleItems.map((item) =>
-                          renderNavItem(item, () => setIsMobileOpen(false))
-                        )}
-                      </nav>
+                {navSections.map((section) => (
+                  <div key={section.label} className="space-y-1">
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-bold tracking-wider text-muted-foreground/70 uppercase">
+                      {section.label}
                     </div>
-                  );
-                })}
+                    <nav className="grid gap-1">
+                      {section.items.map((item) =>
+                        renderNavItem(item, () => setIsMobileOpen(false))
+                      )}
+                    </nav>
+                  </div>
+                ))}
               </div>
             </div>
             <div className="flex-1" onClick={toggleMobileSidebar} />

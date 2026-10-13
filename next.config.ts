@@ -36,6 +36,12 @@ const nextConfig: NextConfig = {
   // pdf-parse-fork memuat mesin pdf.js secara internal (CJS). Jalankan sebagai
   // paket eksternal di server agar tidak ditransformasi saat build.
   serverExternalPackages: ["pdf-parse-fork"],
+  experimental: {
+    // Tahap 4 (P0.4): batas buffer body saat proxy aktif. Batas unggahan dokumen
+    // aplikasi 10MB; 12MB memberi ruang untuk overhead multipart agar berkas
+    // berukuran maksimum tetap terbaca utuh oleh route handler.
+    proxyClientMaxBodySize: "12mb",
+  },
   typescript: {
     ignoreBuildErrors: true,
   },

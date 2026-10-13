@@ -3,6 +3,13 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
+import { evaluateDocumentAccess } from "@/lib/document-access";
+import { extractClientInfo, logAudit } from "@/lib/audit";
+import {
+  deletePrivateDocument,
+  parseDocumentRef,
+  toDocumentDto,
+} from "@/lib/document-storage";
 
 export async function GET(
   req: NextRequest,
@@ -18,6 +25,7 @@ export async function GET(
     if (!authCheck.authorized) {
       return authCheck.response;
     }
+    const user = authCheck.user;
 
     const { id } = await params;
     const document = await db.document.findUnique({
@@ -31,7 +39,14 @@ export async function GET(
       return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, data: document });
+    // Metadata (nama berkas, keterangan) juga merupakan data sensitif:
+    // wajib lolos cakupan organisasi/cabang/penugasan.
+    const access = await evaluateDocumentAccess(user, document);
+    if (!access.allowed) {
+      return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, data: toDocumentDto(document) });
   } catch (error) {
     console.error("Error fetching document:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
@@ -39,7 +54,7 @@ export async function GET(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -52,11 +67,43 @@ export async function DELETE(
     if (!authCheck.authorized) {
       return authCheck.response;
     }
+    const user = authCheck.user;
 
     const { id } = await params;
-    await db.document.delete({
-      where: { id },
+    const document = await db.document.findUnique({ where: { id } });
+
+    if (!document) {
+      return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
+    }
+
+    const access = await evaluateDocumentAccess(user, document);
+    if (!access.allowed) {
+      return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
+    }
+
+    await logAudit({
+      organizationId: user.organizationId,
+      userId: user.id,
+      action: "DELETE",
+      entityType: "DOCUMENT",
+      entityId: document.id,
+      ...extractClientInfo(req),
+      oldValues: { documentType: document.documentType, mimeType: document.mimeType, fileSize: document.fileSize },
+      notes: "Dokumen dihapus dari sistem.",
     });
+
+    // Baris database dihapus lebih dulu: bila penghapusan berkas gagal, yang
+    // tersisa hanyalah berkas yatim (aman), bukan record yang menunjuk ke
+    // berkas yang sudah tidak ada.
+    await db.document.delete({ where: { id } });
+
+    const ref = parseDocumentRef(document.filePath);
+    if (ref.kind === "private") {
+      const removed = await deletePrivateDocument(ref.key);
+      if (!removed) {
+        console.error(`Private document file could not be removed: ${ref.key}`);
+      }
+    }
 
     return NextResponse.json({ success: true, message: "Dokumen berhasil dihapus" });
   } catch (error) {

@@ -1,8 +1,47 @@
 import { PrismaClient } from '@prisma/client'
 // Tahap 1A (P0.1): sandi seed memakai utilitas hashing yang sama dengan aplikasi.
 import { generateRandomPassword, hashPassword, validatePasswordPolicy } from '../src/lib/password'
+// Tahap 4 (P0.4): contoh dokumen disimpan pada penyimpanan privat, bukan di public/.
+import {
+  privateDocumentExists,
+  privateKeyOf,
+  savePrivateDocument,
+} from '../src/lib/document-storage'
 
 const prisma = new PrismaClient()
+
+/** Contoh isi berkas PDF minimal yang tetap valid dibuka di penampil PDF. */
+function buildMinimalPdf(text: string): Buffer {
+  const escape = (value: string) => value.replace(/([\\()])/g, "\\$1")
+  const objects = [
+    '<</Type/Catalog/Pages 2 0 R>>',
+    '<</Type/Pages/Kids[3 0 R]/Count 1>>',
+    '<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>',
+    '<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>',
+  ]
+  const stream = `BT /F1 18 Tf 72 760 Td (${escape(text)}) Tj ET`
+  objects.push(`<</Length ${stream.length}>>\nstream\n${stream}\nendstream`)
+
+  let pdf = '%PDF-1.4\n'
+  const offsets: number[] = []
+  objects.forEach((body, index) => {
+    offsets.push(pdf.length)
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`
+  })
+  const startxref = pdf.length
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  offsets.forEach((offset) => {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`
+  })
+  pdf += `trailer\n<</Size ${objects.length + 1}/Root 1 0 R>>\nstartxref\n${startxref}\n%%EOF`
+  return Buffer.from(pdf, 'latin1')
+}
+
+/** PNG 1x1 sebagai berkas contoh foto (hanya untuk data demo). */
+const SAMPLE_PHOTO_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64'
+)
 
 async function main() {
   const org = await prisma.organization.upsert({
@@ -406,57 +445,86 @@ async function main() {
   }
 
   // Seed Sample Documents (Section 17)
-  const existingDocCount = await prisma.document.count({ where: { organizationId: org.id } })
-  if (existingDocCount === 0) {
-    const firstApp = await prisma.creditApplication.findFirst({ where: { organizationId: org.id } })
-    if (firstApp) {
-      await prisma.document.createMany({
-        data: [
-          {
-            organizationId: org.id,
-            ownerType: 'CREDIT_APPLICATION',
-            ownerId: firstApp.id,
-            documentType: 'KTP',
-            fileName: 'KTP_Debitur_Budi_Santoso.pdf',
-            filePath: '/uploads/documents/ktp-budi.pdf',
-            fileExt: 'pdf',
-            fileSize: 450200,
-            mimeType: 'application/pdf',
-            uploadedById: adminUser.id,
-            status: 'ACTIVE',
-            notes: 'KTP elektronik asli terverifikasi.',
-          },
-          {
-            organizationId: org.id,
-            ownerType: 'CREDIT_APPLICATION',
-            ownerId: firstApp.id,
-            documentType: 'COLLATERAL_DOC',
-            fileName: 'Sertifikat_SHM_No_1284_Denpasar.pdf',
-            filePath: '/uploads/documents/shm-1284.pdf',
-            fileExt: 'pdf',
-            fileSize: 1850400,
-            mimeType: 'application/pdf',
-            uploadedById: adminUser.id,
-            status: 'ACTIVE',
-            notes: 'SHM atas nama pemohon langsung.',
-          },
-          {
-            organizationId: org.id,
-            ownerType: 'CREDIT_APPLICATION',
-            ownerId: firstApp.id,
-            documentType: 'SURVEY_PHOTO',
-            fileName: 'Foto_Usaha_Toko_Sembako.jpg',
-            filePath: '/uploads/documents/foto-toko.jpg',
-            fileExt: 'jpg',
-            fileSize: 820100,
-            mimeType: 'image/jpeg',
-            uploadedById: adminUser.id,
-            status: 'ACTIVE',
-            notes: 'Foto tampak depan dan persediaan barang dagangan.',
-          },
-        ],
+  // Tahap 4 (P0.4): berkas contoh ditulis ke penyimpanan privat (di luar public/)
+  // dan baris lama yang masih menunjuk jalur publik diperbaiki agar tidak lagi
+  // bergantung pada /uploads/documents/*.
+  const sampleDocuments = [
+    {
+      documentType: 'KTP',
+      fileName: 'KTP_Debitur_Budi_Santoso.pdf',
+      legacyPath: '/uploads/documents/ktp-budi.pdf',
+      fileExt: 'pdf' as const,
+      mimeType: 'application/pdf',
+      notes: 'KTP elektronik asli terverifikasi.',
+      build: () => buildMinimalPdf('Contoh KTP Debitor - BPR Utama (data demo)'),
+    },
+    {
+      documentType: 'COLLATERAL_DOC',
+      fileName: 'Sertifikat_SHM_No_1284_Denpasar.pdf',
+      legacyPath: '/uploads/documents/shm-1284.pdf',
+      fileExt: 'pdf' as const,
+      mimeType: 'application/pdf',
+      notes: 'SHM atas nama pemohon langsung.',
+      build: () => buildMinimalPdf('Contoh Sertifikat SHM - data demo'),
+    },
+    {
+      documentType: 'SURVEY_PHOTO',
+      fileName: 'Foto_Usaha_Toko_Sembako.png',
+      legacyPath: '/uploads/documents/foto-toko.jpg',
+      fileExt: 'png' as const,
+      mimeType: 'image/png',
+      notes: 'Foto tampak depan dan persediaan barang dagangan.',
+      build: () => SAMPLE_PHOTO_PNG,
+    },
+  ] as const
+
+  const firstApp = await prisma.creditApplication.findFirst({ where: { organizationId: org.id } })
+  if (firstApp) {
+    let sampleDocReady = 0
+    for (const sample of sampleDocuments) {
+      const existing = await prisma.document.findFirst({
+        where: {
+          organizationId: org.id,
+          OR: [{ fileName: sample.fileName }, { filePath: sample.legacyPath }],
+        },
+        select: { id: true, filePath: true },
       })
-      console.log('Sample documents seeded successfully.')
+
+      const existingKey = existing ? privateKeyOf(existing.filePath) : null
+      if (existing && existingKey && (await privateDocumentExists(existingKey))) {
+        continue
+      }
+
+      const buffer = sample.build()
+      const saved = await savePrivateDocument(buffer, sample.fileExt)
+      const storageFields = {
+        fileName: sample.fileName,
+        filePath: `private:${saved.key}`,
+        fileExt: sample.fileExt,
+        fileSize: buffer.length,
+        mimeType: sample.mimeType,
+      }
+
+      if (existing) {
+        await prisma.document.update({ where: { id: existing.id }, data: storageFields })
+      } else {
+        await prisma.document.create({
+          data: {
+            organizationId: org.id,
+            ownerType: 'CREDIT_APPLICATION',
+            ownerId: firstApp.id,
+            documentType: sample.documentType,
+            ...storageFields,
+            uploadedById: adminUser.id,
+            status: 'ACTIVE',
+            notes: sample.notes,
+          },
+        })
+      }
+      sampleDocReady += 1
+    }
+    if (sampleDocReady > 0) {
+      console.log(`Sample documents seeded successfully (${sampleDocReady}).`)
     }
   }
 
@@ -1450,6 +1518,72 @@ async function main() {
         "dashboard.view", "crm.lead.view", "crm.customer.view",
         "credit.application.view", "document.view", "inventory.item.view", "asset.view",
         "purchase.request.view", "purchase.order.view", "purchase.receipt.view", "vendor.view",
+      ],
+    },
+    // --- Peran lama (legacy) yang sebelumnya tanpa permission; diselaraskan agar
+    // menu (Tahap 3D) sinkron dengan penegakan izin API. Baseline ini mengikuti
+    // docs/ROLE_PERMISSION_MATRIX.md dan tetap perlu konfirmasi pemilik proses.
+    {
+      code: "AO_MARKETING", name: "Account Officer (Marketing)",
+      description: "Leads dan pengajuan kredit pada cabang/portfolio yang ditugaskan",
+      permissions: [
+        "dashboard.view",
+        ...viewOf("crm.lead", ["view", "create", "update", "assign"]),
+        "crm.customer.view", "crm.customer.create", "crm.customer.update",
+        "credit.application.view", "credit.application.create", "credit.application.update", "credit.application.submit",
+        "credit.survey.view", "field.task.view", "field.activity.view", "field.activity.create", "field.performance.view",
+        "document.view", "document.upload", "document.update",
+        "report.credit.view", "report.field.view",
+      ],
+    },
+    {
+      code: "BRANCH_MANAGER", name: "Kepala Cabang (Branch Manager)",
+      description: "Pengawasan dan persetujuan kredit pada cabang yang ditugaskan",
+      permissions: [
+        "dashboard.view",
+        ...viewOf("crm.lead", ["view", "create", "update", "assign"]),
+        ...viewOf("crm.customer", ["view", "create", "update"]),
+        "credit.application.view", "credit.application.create", "credit.application.update",
+        "credit.application.assign", "credit.application.verify", "credit.application.return",
+        "credit.analysis.view", "credit.survey.view", "credit.review.view",
+        "credit.decision.view", "credit.decision.approve", "credit.decision.reject", "credit.decision.return",
+        "credit.realization.view",
+        "field.task.view", "field.task.assign", "field.performance.view",
+        "document.view", "document.upload", "document.update",
+        "inventory.item.view", "asset.view",
+        "purchase.request.view", "purchase.request.approve", "purchase.request.reject", "purchase.order.view", "vendor.view",
+        "report.credit.view", "report.credit.export", "report.field.view", "report.field.export", "report.management.view",
+      ],
+    },
+    {
+      code: "CREDIT_COMMITTEE", name: "Komite Kredit Cabang",
+      description: "Review dan keputusan kredit komite cabang",
+      permissions: [
+        "dashboard.view", "crm.customer.view",
+        "credit.application.view", "credit.analysis.view", "credit.survey.view",
+        ...viewOf("credit.review", ["view", "create", "update", "submit", "return"]),
+        "credit.decision.view", "credit.decision.approve", "credit.decision.reject", "credit.decision.return",
+        "credit.realization.view", "field.task.view", "document.view",
+        "report.credit.view", "report.credit.export", "report.management.view",
+      ],
+    },
+    {
+      code: "DIRECTOR", name: "Direksi / Komite Kredit Pusat",
+      description: "Persetujuan kredit tingkat pusat dan pengawasan menyeluruh",
+      permissions: [
+        "dashboard.view", "dashboard.management_view",
+        "crm.lead.view", "crm.customer.view",
+        "credit.application.view", "credit.analysis.view", "credit.survey.view", "credit.review.view",
+        "credit.decision.view", "credit.decision.approve", "credit.decision.reject", "credit.decision.return",
+        "credit.realization.view", "credit.realization.confirm", "credit.realization.export",
+        "field.task.view", "field.performance.view",
+        "document.view", "document.download",
+        "inventory.item.view", "asset.view",
+        "purchase.request.view", "purchase.request.approve", "purchase.request.reject",
+        "purchase.order.view", "purchase.order.approve", "purchase.receipt.view", "vendor.view",
+        ...viewOf("report", ["credit", "field", "inventory", "purchasing", "management"].flatMap((d) => [`${d}.view`, `${d}.export`])),
+        "audit.log.view", "audit.log.export",
+        "admin.user.view",
       ],
     },
   ]

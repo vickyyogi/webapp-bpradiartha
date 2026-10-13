@@ -1173,7 +1173,7 @@ export function CreditApplicationDetailClientView({
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <a href={doc.filePath} target="_blank" rel="noopener noreferrer">
+                      <a href={doc.downloadUrl} target="_blank" rel="noopener noreferrer">
                         <Button variant="outline" size="sm" className="gap-1 text-xs">
                           <Download className="h-3.5 w-3.5 text-primary" /> Unduh / Buka
                         </Button>

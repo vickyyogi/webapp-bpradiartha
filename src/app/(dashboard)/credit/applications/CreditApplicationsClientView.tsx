@@ -112,7 +112,6 @@ type DocumentOption = {
   id: string;
   ownerId: string;
   fileName: string;
-  filePath: string;
 };
 
 interface Props {
@@ -333,7 +332,6 @@ export function CreditApplicationsClientView({
             id: `ktp-${Date.now()}`,
             ownerId: json.data.id,
             fileName: ktpData.fileName,
-            filePath: ktpData.fileData,
           },
           ...docList,
         ]);

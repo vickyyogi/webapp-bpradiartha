@@ -364,6 +364,19 @@ async function main(): Promise<void> {
       body: JSON.stringify({ action: "SEND", userId: userB.id, title: "Uji", message: "Uji lintas organisasi" }),
     });
     check("kirim notifikasi lintas organisasi → 403", notifRes.status === 403, String(notifRes.status));
+
+    // ===== Tahap 3D: penjagaan halaman (redirect ke /forbidden) =====
+    const pageBranchAudit = await fetch(`${BASE}/audit`, { headers: { cookie: branchJar.header() }, redirect: "manual" });
+    check("halaman /audit (cakupan cabang) dialihkan ke /forbidden", pageBranchAudit.status === 307 && (pageBranchAudit.headers.get("location") || "").includes("/forbidden"), `${pageBranchAudit.status} ${pageBranchAudit.headers.get("location")}`);
+
+    const pageNoPermReports = await fetch(`${BASE}/reports`, { headers: { cookie: noPermJar.header() }, redirect: "manual" });
+    check("halaman /reports tanpa izin dialihkan ke /forbidden", pageNoPermReports.status === 307 && (pageNoPermReports.headers.get("location") || "").includes("/forbidden"), `${pageNoPermReports.status} ${pageNoPermReports.headers.get("location")}`);
+
+    const pageBranchAdmin = await fetch(`${BASE}/admin/users`, { headers: { cookie: branchJar.header() }, redirect: "manual" });
+    check("halaman /admin/users (bukan org-wide) dialihkan ke /forbidden", pageBranchAdmin.status === 307 && (pageBranchAdmin.headers.get("location") || "").includes("/forbidden"), `${pageBranchAdmin.status} ${pageBranchAdmin.headers.get("location")}`);
+
+    const pageBranchCredit = await fetch(`${BASE}/credit/applications`, { headers: { cookie: branchJar.header() }, redirect: "manual" });
+    check("halaman yang menjadi porsi user → 200", pageBranchCredit.status === 200, String(pageBranchCredit.status));
   } finally {
     if (createdApps.length) {
       await prisma.creditStatusHistory.deleteMany({ where: { creditApplicationId: { in: createdApps } } });

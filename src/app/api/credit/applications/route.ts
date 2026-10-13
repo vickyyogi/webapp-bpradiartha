@@ -16,6 +16,15 @@ import {
   normalizeIdentityNumber,
   type CustomerTypeValue,
 } from "@/lib/customer";
+import {
+  DOCUMENT_MAX_BYTES,
+  DocumentValidationError,
+  parseDocumentRef,
+  savePrivateDocument,
+  validateDocumentUpload,
+  type SniffedDocumentType,
+} from "@/lib/document-storage";
+import { extractClientInfo, logAudit } from "@/lib/audit";
 
 /** Field penugasan pada pengajuan kredit yang memberi hak akses kepada petugas. */
 export const CREDIT_ASSIGNMENT_FIELDS = [
@@ -180,6 +189,42 @@ export async function POST (req: NextRequest) {
       if (err) return NextResponse.json({ error: err, code: "ASSIGNEE_FORBIDDEN" }, { status: 403 });
     }
 
+    // Tahap 4 (P0.4): berkas KTP divalidasi SEBELUM ada data yang dibuat, agar
+    // berkas ditolak lebih dulu (ukuran, magic bytes, kecocokan ekstensi) dan
+    // tidak pernah lagi disimpan sebagai base64 di database.
+    let ktpBuffer: Buffer | null = null;
+    let ktpType: SniffedDocumentType | null = null;
+    const ktpPayload = ktpDocument && typeof ktpDocument === "object" ? ktpDocument.fileData : null;
+    if (ktpPayload !== null && ktpPayload !== undefined && ktpPayload !== "") {
+      if (typeof ktpPayload !== "string") {
+        return NextResponse.json({ error: "Berkas KTP tidak valid." }, { status: 400 });
+      }
+      const maxLength = Math.ceil((DOCUMENT_MAX_BYTES * 4) / 3) + 1024;
+      if (ktpPayload.length > maxLength) {
+        return NextResponse.json(
+          { error: `Ukuran berkas KTP melebihi batas maksimum ${Math.floor(DOCUMENT_MAX_BYTES / (1024 * 1024))} MB` },
+          { status: 400 }
+        );
+      }
+      const normalized = ktpPayload.startsWith("data:") ? ktpPayload : `data:image/jpeg;base64,${ktpPayload}`;
+      const decoded = parseDocumentRef(normalized);
+      if (decoded.kind !== "inline" || decoded.buffer.length === 0) {
+        return NextResponse.json({ error: "Berkas KTP tidak dapat dibaca." }, { status: 400 });
+      }
+      try {
+        ktpType = validateDocumentUpload(decoded.buffer, {
+          fileName: typeof ktpDocument.fileName === "string" ? ktpDocument.fileName : "KTP.jpg",
+          declaredMime: typeof ktpDocument.mimeType === "string" ? ktpDocument.mimeType : null,
+        });
+        ktpBuffer = decoded.buffer;
+      } catch (error) {
+        if (error instanceof DocumentValidationError) {
+          return NextResponse.json({ error: error.message }, { status: 400 });
+        }
+        throw error;
+      }
+    }
+
     // "USER" adalah nama mode lama yang menunjuk ke akun pegawai; kini diperlakukan
     // sebagai pemilihan nasabah terdaftar.
     const rawMode = String(customerMode || applicantMode || "MANUAL").toUpperCase();
@@ -326,20 +371,37 @@ export async function POST (req: NextRequest) {
       },
     });
 
-    if (ktpDocument && ktpDocument.fileData) {
-      await db.document.create({
+    if (ktpBuffer && ktpType) {
+      const savedKtp = await savePrivateDocument(ktpBuffer, ktpType.ext);
+      const createdDocument = await db.document.create({
         data: {
           organizationId: currentUser.organizationId,
           ownerType: "CREDIT_APPLICATION",
           ownerId: newApplication.id,
           documentType: "KTP",
-          fileName: ktpDocument.fileName || "KTP_Pemohon.jpg",
-          filePath: ktpDocument.fileData,
-          fileExt: (ktpDocument.fileName || "").split(".").pop() || "jpg",
-          fileSize: ktpDocument.fileSize || 1024,
-          mimeType: ktpDocument.mimeType || "image/jpeg",
+          fileName: (typeof ktpDocument?.fileName === "string" && ktpDocument.fileName.slice(0, 255)) || "KTP_Pemohon",
+          filePath: `private:${savedKtp.key}`,
+          fileExt: ktpType.ext,
+          fileSize: ktpBuffer.length,
+          mimeType: ktpType.mimeType,
           uploadedById: currentUser.id,
           notes: "Dokumen KTP pemohon.",
+        },
+      });
+
+      await logAudit({
+        organizationId: currentUser.organizationId,
+        userId: currentUser.id,
+        action: "UPLOAD",
+        entityType: "DOCUMENT",
+        entityId: createdDocument.id,
+        ...extractClientInfo(req),
+        newValues: {
+          documentType: "KTP",
+          ownerType: "CREDIT_APPLICATION",
+          mimeType: ktpType.mimeType,
+          fileSize: ktpBuffer.length,
+          sha256: savedKtp.sha256,
         },
       });
     }

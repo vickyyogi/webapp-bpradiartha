@@ -4,6 +4,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { buildScopeFilter, toScopeUser } from "@/lib/access-scope";
+import { toDocumentDto } from "@/lib/document-storage";
 import { CreditApplicationDetailClientView } from "./CreditApplicationDetailClientView";
 import { Metadata } from "next";
 
@@ -119,7 +120,9 @@ export default async function CreditApplicationDetailPage({
       orderBy: { fullName: "asc" },
     }),
     db.document.findMany({
-      where: { ownerType: "CREDIT_APPLICATION", ownerId: id },
+      // Batasi ke organisasi pengguna: daftar dokumen tidak boleh bocor
+      // hanya karena record induk cocok (Tahap 4 / P0.4).
+      where: { ownerType: "CREDIT_APPLICATION", ownerId: id, organizationId: currentUser.organizationId },
       include: { uploadedBy: { select: { id: true, fullName: true, email: true } } },
       orderBy: { createdAt: "desc" },
     }),
@@ -133,7 +136,7 @@ export default async function CreditApplicationDetailPage({
     <CreditApplicationDetailClientView
       application={JSON.parse(JSON.stringify(application))}
       users={users}
-      initialDocuments={JSON.parse(JSON.stringify(documents))}
+      initialDocuments={JSON.parse(JSON.stringify(documents.map(toDocumentDto)))}
     />
   );
 }

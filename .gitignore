@@ -42,3 +42,5 @@ next-env.d.ts
 
 #env
 .env
+# Tahap 4 (P0.4) - dokumen privat (jangan pernah di-commit)
+/storage/

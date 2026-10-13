@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { toDocumentDto } from "@/lib/document-storage";
 import { DocumentsClientView } from "./DocumentsClientView";
 import { Metadata } from "next";
 
@@ -26,5 +27,6 @@ export default async function DocumentsPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  return <DocumentsClientView initialDocuments={JSON.parse(JSON.stringify(documents))} />;
+  // Kunci penyimpanan tidak pernah dikirim ke klien (hanya URL unduh berotorisasi).
+  return <DocumentsClientView initialDocuments={JSON.parse(JSON.stringify(documents.map(toDocumentDto)))} />;
 }

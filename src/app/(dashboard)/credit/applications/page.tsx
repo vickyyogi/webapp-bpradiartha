@@ -79,7 +79,7 @@ export default async function CreditApplicationsPage() {
     }),
     db.document.findMany({
       where: { organizationId, ownerType: "CREDIT_APPLICATION", documentType: "KTP" },
-      select: { id: true, ownerId: true, fileName: true, filePath: true },
+      select: { id: true, ownerId: true, fileName: true },
     }),
     db.customer.findMany({
       where: { ...customerScope, isActive: true },

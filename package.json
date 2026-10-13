@@ -22,6 +22,10 @@
     "verify:customers:live": "ts-node --project scripts/tsconfig.json scripts/verify-customers-live.ts",
     "verify:access": "ts-node --project scripts/tsconfig.json scripts/verify-access.ts",
     "verify:access:live": "ts-node --project scripts/tsconfig.json scripts/verify-access-live.ts",
+    "verify:navigation": "ts-node --project scripts/tsconfig.json scripts/verify-navigation.ts",
+    "verify:documents": "ts-node --project scripts/tsconfig.json scripts/verify-documents.ts",
+    "verify:documents:live": "ts-node --project scripts/tsconfig.json scripts/verify-documents-live.ts",
+    "migrate:documents": "ts-node --project scripts/tsconfig.json scripts/migrate-private-documents.ts",
     "backfill:passwords": "ts-node --project scripts/tsconfig.json scripts/backfill-passwords.ts",
     "set-password": "ts-node --project scripts/tsconfig.json scripts/set-password.ts"
   },
