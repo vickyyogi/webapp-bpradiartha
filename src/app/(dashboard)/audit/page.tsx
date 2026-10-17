@@ -1,19 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useState, useCallback } from "react";
 import {
   ShieldCheck,
   Search,
-  Filter,
   RefreshCw,
   Eye,
-  Calendar,
-  User,
-  Monitor,
-  Globe,
-  FileText,
-  Clock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,8 +46,26 @@ const ENTITIES = [
   "DOCUMENT",
 ];
 
+interface AuditLog {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  ipAddress?: string | null;
+  notes?: string | null;
+  userAgent?: string | null;
+  oldValues?: unknown;
+  newValues?: unknown;
+  createdAt: string;
+  user?: {
+    fullName: string;
+    email?: string | null;
+    employeeNumber?: string | null;
+  } | null;
+}
+
 export default function AuditTrailPage() {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -67,37 +77,44 @@ export default function AuditTrailPage() {
   const [endDate, setEndDate] = useState("");
 
   // Modal Detail State
-  const [selectedLog, setSelectedLog] = useState<any>(null);
+  const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-
-  const fetchAuditLogs = async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      if (action !== "ALL") params.set("action", action);
-      if (entityType !== "ALL") params.set("entityType", entityType);
-      if (startDate) params.set("startDate", startDate);
-      if (endDate) params.set("endDate", endDate);
-
-      const res = await fetch(`/api/audit?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setLogs(data.logs || []);
-        setTotalCount(data.totalCount || 0);
-      }
-    } catch (err) {
-      console.error("Failed to load audit logs:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    fetchAuditLogs();
-  }, [search, action, entityType, startDate, endDate]);
+    let cancelled = false;
+    async function load() {
+      try {
+        setLoading(true);
+        const params = new URLSearchParams();
+        if (search) params.set("search", search);
+        if (action !== "ALL") params.set("action", action);
+        if (entityType !== "ALL") params.set("entityType", entityType);
+        if (startDate) params.set("startDate", startDate);
+        if (endDate) params.set("endDate", endDate);
 
-  const openLogDetail = (log: any) => {
+        const res = await fetch(`/api/audit?${params.toString()}`);
+        if (res.ok) {
+          const data = (await res.json()) as { logs?: AuditLog[]; totalCount?: number };
+          if (cancelled) return;
+          setLogs(data.logs || []);
+          setTotalCount(data.totalCount || 0);
+        }
+      } catch (err) {
+        console.error("Failed to load audit logs:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [search, action, entityType, startDate, endDate, refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  const openLogDetail = (log: AuditLog) => {
     setSelectedLog(log);
     setDetailOpen(true);
   };
@@ -122,7 +139,7 @@ export default function AuditTrailPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchAuditLogs} className="gap-1 text-xs">
+          <Button variant="outline" size="sm" onClick={refresh} className="gap-1 text-xs">
             <RefreshCw className="h-3.5 w-3.5" /> Segarkan Log
           </Button>
         </div>

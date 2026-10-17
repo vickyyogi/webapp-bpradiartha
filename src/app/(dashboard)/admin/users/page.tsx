@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,22 +32,28 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/users");
-      if (res.ok) setUsers(await res.json());
-    } catch (error) {
-      console.error("Error fetching data", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    let cancelled = false;
+    async function load() {
+      try {
+        setLoading(true);
+        const res = await fetch("/api/users");
+        if (res.ok && !cancelled) setUsers((await res.json()) as User[]);
+      } catch (error) {
+        console.error("Error fetching data", error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const handleToggleActive = async (user: User) => {
     if (!confirm(`Apakah Anda yakin ingin menonaktifkan pengguna ${user.fullName}?`)) return;
@@ -59,7 +65,7 @@ export default function UsersPage() {
 
       if (!res.ok) throw new Error("Gagal mengubah status");
 
-      fetchData();
+      refresh();
     } catch (error) {
       console.error("Error toggling status", error);
     }

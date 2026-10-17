@@ -138,7 +138,7 @@ export function PublicHeader() {
                 <div className="absolute top-full left-0 w-84 bg-lp-card text-lp-text border border-lp-border rounded-xl shadow-xl p-3 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
                   <div className="px-2 py-1.5 border-b border-lp-border mb-2 flex items-center justify-between">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-lp-muted flex items-center gap-1.5">
-                      <FileText className="h-3 w-3 text-lp-brand" /> Publikasi Resmi (PDF)
+                      <FileText className="h-3 w-3 text-lp-brand" /> Publikasi (PDF)
                     </span>
                     <span className="lp-eyebrow text-[9px] px-1.5 py-0.5 rounded-full border border-lp-accent/50 bg-lp-accent-soft text-lp-brand">
                       OJK & LPS
@@ -221,7 +221,7 @@ export function PublicHeader() {
               }`}
             >
               <FileText className="h-3.5 w-3.5" />
-              Berita & Kegiatan
+              Blogs
             </Link>
             <Link
               href="/galeri"
@@ -230,7 +230,7 @@ export function PublicHeader() {
               }`}
             >
               <Camera className="h-3.5 w-3.5" />
-              Galeri Foto
+              Galeri
             </Link>
             <Link
               href="/#faq"
@@ -264,11 +264,12 @@ export function PublicHeader() {
             <button
               type="button"
               aria-label={mobileMenuOpen ? "Tutup menu" : "Buka menu"}
-              className="lg:hidden lp-circle lp-circle-light h-10 w-10 cursor-pointer"
+              className="lg:hidden h-10 w-10 cursor-pointer flex items-center justify-center rounded-lg border border-lp-border text-lp-muted hover:text-lp-brand transition-colors"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
+            
           </div>
         </div>
 

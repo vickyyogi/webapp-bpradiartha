@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Poppins, Fraunces } from "next/font/google";
 import ScrollToTop from "@/components/public/ScrollToTop";
 import { ThemeProvider } from "@/components/public/ThemeProvider";
 import "./globals.css";
+import FloatingMenu from "@/components/public/FloatingMenu";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -58,7 +59,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           disableTransitionOnChange
         >
           {children}
+          {/* Scroll to top button */}
           <ScrollToTop />
+          {/* Floating quick-nav rail */}
+          <FloatingMenu />
         </ThemeProvider>
         
       </body>

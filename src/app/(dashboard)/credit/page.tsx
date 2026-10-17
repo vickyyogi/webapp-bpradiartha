@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CreditCard, FileCheck2, FileScan, FileText, ClipboardList, CheckCircle2, XCircle, ArrowRight, ShieldCheck, MapPin } from "lucide-react";
+import { FileCheck2, FileScan, FileText, ClipboardList, ArrowRight, ShieldCheck, MapPin } from "lucide-react";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";

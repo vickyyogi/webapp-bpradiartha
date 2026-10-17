@@ -1,20 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import {
-  ShoppingCart,
-  ArrowLeft,
-  PackageCheck,
-  Building2,
-  Calendar,
-  DollarSign,
-  CheckCircle2,
-  AlertTriangle,
-  FileText,
-  Boxes,
-} from "lucide-react";
+import { ArrowLeft, PackageCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,13 +18,68 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+interface PurchaseOrderItem {
+  id: string;
+  itemName: string;
+  unit: string;
+  quantityOrdered: number;
+  quantityReceived: number;
+  notes?: string;
+  unitPrice?: number;
+  totalPrice?: number;
+}
+
+interface GoodsReceiptItem {
+  id: string;
+  itemName: string;
+  quantityReceived: number;
+  unit: string;
+  condition: string;
+  isStocked?: boolean;
+}
+
+interface GoodsReceipt {
+  id: string;
+  receiptNumber: string;
+  status: string;
+  receiptDate: string;
+  receivedBy?: { fullName?: string };
+  deliveryNoteNumber?: string;
+  notes?: string;
+  items?: GoodsReceiptItem[];
+}
+
+interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  status: string;
+  poDate: string;
+  expectedDeliveryDate?: string;
+  paymentTerms?: string;
+  totalAmount?: number;
+  subtotal?: number;
+  taxAmount?: number;
+  vendor?: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    bankName?: string;
+    bankAccount?: string;
+    bankHolder?: string;
+  };
+  purchaseRequest?: { id: string; requestNumber: string };
+  items: PurchaseOrderItem[];
+  goodsReceipts?: GoodsReceipt[];
+}
+
 export default function PurchaseOrderDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params?.id as string;
 
-  const [order, setOrder] = useState<any>(null);
+  const [order, setOrder] = useState<PurchaseOrder | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // GRN Receipt Modal State
@@ -61,29 +105,41 @@ export default function PurchaseOrderDetailPage() {
     items: [],
   });
 
-  const fetchDetail = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/purchasing/orders/${id}`);
-      if (!res.ok) throw new Error("Gagal mengambil data purchase order.");
-
-      const data = await res.json();
-      setOrder(data.order);
-    } catch (err: any) {
-      console.error(err);
-      setFeedbackMsg({ type: "error", text: err.message });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    if (id) fetchDetail();
-  }, [id]);
+    if (!id) return;
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/purchasing/orders/${id}`);
+        if (!res.ok) throw new Error("Gagal mengambil data purchase order.");
+
+        const data = (await res.json()) as { order: PurchaseOrder | null };
+        if (cancelled) return;
+        setOrder(data.order);
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setFeedbackMsg({
+            type: "error",
+            text: err instanceof Error ? err.message : "Gagal mengambil data purchase order.",
+          });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const openReceiptModal = () => {
     if (!order) return;
-    const initialItems = order.items.map((it: any) => {
+    const initialItems = order.items.map((it) => {
       const remainingQty = Math.max(0, it.quantityOrdered - it.quantityReceived);
       return {
         poItemId: it.id,
@@ -105,7 +161,7 @@ export default function PurchaseOrderDetailPage() {
     setGrnOpen(true);
   };
 
-  const handleItemReceiptChange = (index: number, field: string, value: any) => {
+  const handleItemReceiptChange = (index: number, field: string, value: string | number | boolean) => {
     const updated = [...receiptForm.items];
     updated[index] = { ...updated[index], [field]: value };
     setReceiptForm({ ...receiptForm, items: updated });
@@ -113,6 +169,7 @@ export default function PurchaseOrderDetailPage() {
 
   const handleSubmitReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!order) return;
     setReceiving(true);
     setFeedbackMsg(null);
     try {
@@ -141,7 +198,7 @@ export default function PurchaseOrderDetailPage() {
         }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string; message?: string };
       if (!res.ok) throw new Error(data.error || "Gagal mencatat penerimaan barang.");
 
       setFeedbackMsg({
@@ -149,9 +206,12 @@ export default function PurchaseOrderDetailPage() {
         text: `${data.message || "Penerimaan barang berhasil dicatat!"}`,
       });
       setGrnOpen(false);
-      fetchDetail();
-    } catch (err: any) {
-      setFeedbackMsg({ type: "error", text: err.message });
+      refresh();
+    } catch (err) {
+      setFeedbackMsg({
+        type: "error",
+        text: err instanceof Error ? err.message : "Gagal mencatat penerimaan barang.",
+      });
     } finally {
       setReceiving(false);
     }
@@ -355,7 +415,7 @@ export default function PurchaseOrderDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {order.items?.map((it: any) => {
+                {order.items?.map((it) => {
                   const isFullyReceived = it.quantityReceived >= it.quantityOrdered;
                   const percent = Math.min(100, Math.round((it.quantityReceived / it.quantityOrdered) * 100));
 
@@ -426,7 +486,7 @@ export default function PurchaseOrderDetailPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {order.goodsReceipts.map((grn: any) => (
+              {order.goodsReceipts?.map((grn) => (
                 <div key={grn.id} className="p-4 rounded-lg border bg-card space-y-2">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b pb-2">
                     <div className="flex items-center gap-2">
@@ -443,14 +503,14 @@ export default function PurchaseOrderDetailPage() {
 
                   <div className="text-xs text-muted-foreground">
                     No. Surat Jalan Vendor: <strong className="text-foreground">{grn.deliveryNoteNumber || "-"}</strong>
-                    {grn.notes && <span> • Catatan: "{grn.notes}"</span>}
+                    {grn.notes && <span> • Catatan: &quot;{grn.notes}&quot;</span>}
                   </div>
 
                   {/* Received items list */}
                   <div className="bg-muted/30 p-2.5 rounded text-xs space-y-1 mt-2">
                     <span className="font-semibold text-muted-foreground">Item Diterima:</span>
                     <ul className="list-disc list-inside space-y-0.5">
-                      {grn.items?.map((gi: any) => (
+                      {grn.items?.map((gi) => (
                         <li key={gi.id}>
                           <strong>{gi.itemName}</strong>: {gi.quantityReceived} {gi.unit} (Kondisi: {gi.condition})
                           {gi.isStocked && (

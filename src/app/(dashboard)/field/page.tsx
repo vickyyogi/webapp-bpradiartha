@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { MapPin, CheckCircle2, Clock, AlertTriangle, Users, ClipboardList, TrendingUp, ArrowRight, PlusCircle } from "lucide-react";
+import { ClipboardList, TrendingUp, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";

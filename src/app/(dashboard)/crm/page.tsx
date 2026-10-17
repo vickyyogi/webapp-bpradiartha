@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users2, UserPlus, Filter, FileText, PhoneCall } from "lucide-react";
+import { Users2, UserPlus, PhoneCall } from "lucide-react";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";

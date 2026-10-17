@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, TrendingUp, Users, CheckCircle2, DollarSign, Calendar, Clock, AlertTriangle, Search } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +32,7 @@ export function FieldPerformanceClientView({
 }: {
   initialPerformance: OfficerPerformance[];
 }) {
-  const [performance, setPerformance] = useState<OfficerPerformance[]>(initialPerformance);
+  const [performance] = useState<OfficerPerformance[]>(initialPerformance);
   const [searchQuery, setSearchQuery] = useState("");
 
   const filtered = performance.filter((p) => {

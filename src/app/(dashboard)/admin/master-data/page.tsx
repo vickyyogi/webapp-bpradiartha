@@ -1,15 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Database,
   Plus,
   Edit,
   Trash2,
-  CheckCircle,
-  XCircle,
   Search,
-  Filter,
   Layers,
   Percent,
   FileCheck,
@@ -20,7 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -31,13 +28,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+interface MasterItemAttributes {
+  interestRate?: number;
+  minAmount?: number;
+  maxAmount?: number;
+  minTenor?: number;
+  maxTenor?: number;
+}
+
 interface MasterItem {
   id: string;
   category: string;
   code: string;
   name: string;
   description: string | null;
-  attributes: any | null;
+  attributes: MasterItemAttributes | null;
   isActive: boolean;
   sortOrder: number;
 }
@@ -58,6 +63,7 @@ export default function MasterDataPage() {
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -77,28 +83,34 @@ export default function MasterDataPage() {
     maxTenor: 36,
   });
 
-  const fetchItems = async () => {
-    setLoading(true);
-    try {
-      const url =
-        selectedCategory === "ALL"
-          ? "/api/admin/master-data"
-          : `/api/admin/master-data?category=${selectedCategory}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        setItems(data);
-      }
-    } catch (e) {
-      console.error("Failed to fetch master data:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchItems();
-  }, [selectedCategory]);
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const url =
+          selectedCategory === "ALL"
+            ? "/api/admin/master-data"
+            : `/api/admin/master-data?category=${selectedCategory}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = (await res.json()) as MasterItem[];
+          if (cancelled) return;
+          setItems(data);
+        }
+      } catch (e) {
+        console.error("Failed to fetch master data:", e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCategory, refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const openAddModal = () => {
     setEditingItem(null);
@@ -120,7 +132,7 @@ export default function MasterDataPage() {
 
   const openEditModal = (item: MasterItem) => {
     setEditingItem(item);
-    const attrs = item.attributes || {};
+    const attrs: MasterItemAttributes = item.attributes || {};
     setForm({
       category: item.category,
       code: item.code,
@@ -139,7 +151,7 @@ export default function MasterDataPage() {
 
   const handleSave = async () => {
     try {
-      let attributes: any = null;
+      let attributes: MasterItemAttributes | null = null;
       if (form.category === "LOAN_PRODUCT") {
         attributes = {
           interestRate: Number(form.interestRate),
@@ -173,7 +185,7 @@ export default function MasterDataPage() {
 
       if (res.ok) {
         setModalOpen(false);
-        fetchItems();
+        refresh();
       } else {
         const err = await res.json();
         alert(err.error || "Gagal menyimpan item");
@@ -187,7 +199,7 @@ export default function MasterDataPage() {
     if (!confirm("Hapus item master data ini?")) return;
     try {
       const res = await fetch(`/api/admin/master-data/${id}`, { method: "DELETE" });
-      if (res.ok) fetchItems();
+      if (res.ok) refresh();
     } catch (e) {
       console.error("Delete error:", e);
     }

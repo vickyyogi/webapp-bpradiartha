@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PlusCircle, Search, MapPin, Calendar, User, Phone, CheckCircle2, AlertCircle, Edit2, Trash2, ArrowLeft } from "lucide-react";
+import { PlusCircle, Search, CheckCircle2, Trash2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -134,8 +134,8 @@ export function FieldTasksClientView({
       setTasks([json.data, ...tasks]);
       setIsAddOpen(false);
       resetForm();
-    } catch (err: any) {
-      setErrorMessage(err.message || "Terjadi kesalahan sistem");
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Terjadi kesalahan sistem");
     } finally {
       setIsSubmitting(false);
     }
@@ -168,8 +168,8 @@ export function FieldTasksClientView({
       setTasks(tasks.map((t) => (t.id === selectedTask.id ? json.data : t)));
       setIsCompleteOpen(false);
       setSelectedTask(null);
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Gagal menyelesaikan tugas");
     } finally {
       setIsSubmitting(false);
     }
@@ -181,8 +181,8 @@ export function FieldTasksClientView({
       const res = await fetch(`/api/field/tasks/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Gagal menghapus tugas");
       setTasks(tasks.filter((t) => t.id !== id));
-    } catch (e: any) {
-      alert(e.message);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Gagal menghapus tugas");
     }
   };
 

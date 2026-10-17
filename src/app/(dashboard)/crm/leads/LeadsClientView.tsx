@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { PlusCircle, Search, Phone, User, Calendar, Tag, MoreVertical, Edit2, Trash2, ArrowRight } from "lucide-react";
+import { PlusCircle, Search, Phone, User, Calendar, Tag, Edit2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -168,8 +167,8 @@ export function LeadsClientView({ initialLeads, officers, branches }: Props) {
       setLeads([result.data, ...leads]);
       setIsAddModalOpen(false);
       resetForm();
-    } catch (err: any) {
-      setErrorMessage(err.message || "Terjadi kesalahan saat menyimpan data");
+    } catch (err) {
+      setErrorMessage((err instanceof Error ? err.message : "") || "Terjadi kesalahan saat menyimpan data");
     } finally {
       setIsSubmitting(false);
     }
@@ -201,8 +200,8 @@ export function LeadsClientView({ initialLeads, officers, branches }: Props) {
       setLeads(leads.map((l) => (l.id === editingLead.id ? result.data : l)));
       setIsEditModalOpen(false);
       setEditingLead(null);
-    } catch (err: any) {
-      setErrorMessage(err.message || "Terjadi kesalahan saat memperbarui data");
+    } catch (err) {
+      setErrorMessage((err instanceof Error ? err.message : "") || "Terjadi kesalahan saat memperbarui data");
     } finally {
       setIsSubmitting(false);
     }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PlusCircle, Search, FileText, Download, Trash2, FileCheck, Image as ImageIcon, Eye, Upload } from "lucide-react";
+import { Search, FileText, Download, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -102,8 +102,8 @@ export function DocumentsClientView({
       setIsUploadOpen(false);
       setSelectedFile(null);
       setNotes("");
-    } catch (err: any) {
-      setErrorMessage(err.message || "Gagal mengunggah berkas");
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Gagal mengunggah berkas");
     } finally {
       setIsUploading(false);
     }
@@ -115,8 +115,8 @@ export function DocumentsClientView({
       const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Gagal menghapus dokumen");
       setDocuments(documents.filter((d) => d.id !== id));
-    } catch (e: any) {
-      alert(e.message);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Gagal menghapus dokumen");
     }
   };
 

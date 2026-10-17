@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   BarChart3,
@@ -8,24 +8,74 @@ import {
   Printer,
   Download,
   Calendar,
-  Filter,
   RefreshCw,
   TrendingUp,
   CreditCard,
   ShoppingCart,
   Boxes,
-  Laptop,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
+interface CreditAppRow {
+  id: string;
+  applicationNumber: string;
+  customer?: { legalName?: string };
+  product?: string;
+  requestedAmount?: number;
+  approvedAmount?: number;
+  realizationAmount?: number;
+  status: string;
+}
+
+interface PurchaseOrderRow {
+  id: string;
+  poNumber: string;
+  vendor?: { name?: string };
+  poDate: string;
+  paymentTerms?: string;
+  subtotal?: number;
+  taxAmount?: number;
+  totalAmount?: number;
+  status: string;
+}
+
+interface ReportsData {
+  creditPipelineSummary?: {
+    totalApplications?: number;
+    totalRequestedAmount?: number;
+    totalApprovedAmount?: number;
+    totalRealizedAmount?: number;
+    byStatus?: Record<string, number>;
+  };
+  fieldProductivitySummary?: {
+    completionRate?: number;
+    completedTasks?: number;
+    totalTasks?: number;
+    pendingTasks?: number;
+  };
+  purchasingSummary?: {
+    totalPOValue?: number;
+    totalPO?: number;
+  };
+  inventoryAssetSummary?: {
+    inventoryValuation?: number;
+    lowStockItemsCount?: number;
+    assetTotalValuation?: number;
+    totalAssetsCount?: number;
+    assignedAssetsCount?: number;
+    maintenanceAssetsCount?: number;
+  };
+  data?: {
+    creditApps?: CreditAppRow[];
+    purchaseOrders?: PurchaseOrderRow[];
+  };
+}
+
 export default function ReportsDashboardPage() {
-  const [reportData, setReportData] = useState<any>(null);
+  const [reportData, setReportData] = useState<ReportsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"credit" | "field" | "purchasing" | "inventory">("credit");
 
@@ -33,28 +83,35 @@ export default function ReportsDashboardPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const fetchReports = async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (startDate) params.set("startDate", startDate);
-      if (endDate) params.set("endDate", endDate);
-
-      const res = await fetch(`/api/reports?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setReportData(data);
-      }
-    } catch (err) {
-      console.error("Failed to load reports:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
-    fetchReports();
-  }, [startDate, endDate]);
+    let cancelled = false;
+    async function load() {
+      try {
+        setLoading(true);
+        const params = new URLSearchParams();
+        if (startDate) params.set("startDate", startDate);
+        if (endDate) params.set("endDate", endDate);
+
+        const res = await fetch(`/api/reports?${params.toString()}`);
+        if (res.ok) {
+          const data = (await res.json()) as ReportsData;
+          if (cancelled) return;
+          setReportData(data);
+        }
+      } catch (err) {
+        console.error("Failed to load reports:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [startDate, endDate, refreshKey]);
 
   const handleExportCSV = (domain: string) => {
     const params = new URLSearchParams();
@@ -128,7 +185,7 @@ export default function ReportsDashboardPage() {
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              <Button variant="ghost" size="sm" onClick={fetchReports} className="gap-1 text-xs">
+              <Button variant="ghost" size="sm" onClick={refresh} className="gap-1 text-xs">
                 <RefreshCw className="h-3.5 w-3.5" /> Hitung Ulang
               </Button>
             </div>
@@ -258,7 +315,7 @@ export default function ReportsDashboardPage() {
             {/* Status breakdown grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2">
               {reportData?.creditPipelineSummary?.byStatus &&
-                Object.entries(reportData.creditPipelineSummary.byStatus).map(([st, count]: any) => (
+                Object.entries(reportData.creditPipelineSummary.byStatus).map(([st, count]) => (
                   <Card key={st} className="p-3 text-center bg-card">
                     <span className="text-[10px] text-muted-foreground font-semibold uppercase">{st}</span>
                     <div className="text-lg font-bold text-foreground mt-1">{count}</div>
@@ -318,7 +375,7 @@ export default function ReportsDashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {reportData?.data?.creditApps?.map((c: any) => (
+                      {reportData?.data?.creditApps?.map((c: CreditAppRow) => (
                         <tr key={c.id} className="hover:bg-muted/40">
                           <td className="py-2 px-3 font-mono text-xs font-semibold text-primary">
                             {c.applicationNumber}
@@ -421,7 +478,7 @@ export default function ReportsDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {reportData?.data?.purchaseOrders?.map((po: any) => (
+                    {reportData?.data?.purchaseOrders?.map((po: PurchaseOrderRow) => (
                       <tr key={po.id} className="hover:bg-muted/40">
                         <td className="py-2 px-3 font-mono text-xs font-semibold text-primary">
                           {po.poNumber}

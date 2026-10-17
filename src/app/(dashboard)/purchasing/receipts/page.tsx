@@ -1,46 +1,62 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  PackageCheck,
   Search,
   RefreshCw,
   Eye,
-  CheckCircle2,
-  Calendar,
-  Building2,
   ShoppingCart,
-  Boxes,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
+interface GoodsReceiptListItem {
+  id: string;
+  receiptNumber: string;
+  status: string;
+  receiptDate: string;
+  deliveryNoteNumber?: string;
+  receivedBy?: { fullName: string };
+  purchaseOrder?: {
+    id: string;
+    poNumber: string;
+    vendor?: { name: string };
+  };
+}
+
 export default function GoodsReceiptsPage() {
-  const [receipts, setReceipts] = useState<any[]>([]);
+  const [receipts, setReceipts] = useState<GoodsReceiptListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-
-  const fetchReceipts = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/purchasing/receipts");
-      if (res.ok) {
-        const data = await res.json();
-        setReceipts(data.receipts || []);
-      }
-    } catch (err) {
-      console.error("Failed to load receipts:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    fetchReceipts();
-  }, []);
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/purchasing/receipts");
+        if (res.ok) {
+          const data = (await res.json()) as { receipts?: GoodsReceiptListItem[] };
+          if (cancelled) return;
+          setReceipts(data.receipts || []);
+        }
+      } catch (err) {
+        console.error("Failed to load receipts:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const filteredReceipts = receipts.filter((r) => {
     if (!search) return true;
@@ -95,7 +111,7 @@ export default function GoodsReceiptsPage() {
                 className="pl-9"
               />
             </div>
-            <Button variant="ghost" size="sm" onClick={fetchReceipts} className="gap-1 text-xs">
+            <Button variant="ghost" size="sm" onClick={refresh} className="gap-1 text-xs">
               <RefreshCw className="h-3.5 w-3.5" /> Segarkan
             </Button>
           </div>

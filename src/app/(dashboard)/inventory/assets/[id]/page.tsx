@@ -1,26 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  Laptop,
   ArrowLeft,
   UserCheck,
   Wrench,
   AlertTriangle,
   History,
-  ShieldCheck,
-  Calendar,
-  DollarSign,
   MapPin,
-  Tag,
   Share2,
   Trash2,
-  CheckCircle2,
-  Clock,
-  RefreshCw,
-  FileText,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,14 +27,69 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+interface AssetHolder {
+  fullName?: string;
+  email?: string;
+}
+
+interface AssetHistoryEntry {
+  id: string;
+  action: string;
+  status?: string | null;
+  condition?: string | null;
+  createdAt: string;
+  fromHolderName?: string | null;
+  toHolderName?: string | null;
+  fromLocation?: string | null;
+  toLocation?: string | null;
+  notes?: string | null;
+  performedBy?: { fullName?: string } | null;
+}
+
+interface AssetMaintenanceRecord {
+  id: string;
+  title: string;
+  status: string;
+  startDate?: string | null;
+  completionDate?: string | null;
+  description?: string | null;
+  vendor?: string | null;
+  technician?: string | null;
+  cost?: number | null;
+  notes?: string | null;
+  performedBy?: { fullName?: string } | null;
+}
+
+interface AssetDetail {
+  assetNumber: string;
+  name: string;
+  status: string;
+  condition: string;
+  category: string;
+  location?: string | null;
+  serialNumber?: string | null;
+  purchasePrice?: number | null;
+  warrantyExpiry?: string | null;
+  vendor?: string | null;
+  currentHolder?: AssetHolder | null;
+  histories: AssetHistoryEntry[];
+  maintenances: AssetMaintenanceRecord[];
+}
+
+interface UserOption {
+  id: string;
+  fullName: string;
+  department?: { name?: string } | null;
+}
+
 export default function AssetDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params?.id as string;
 
-  const [asset, setAsset] = useState<any>(null);
-  const [users, setUsers] = useState<any[]>([]);
+  const [asset, setAsset] = useState<AssetDetail | null>(null);
+  const [users, setUsers] = useState<UserOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState<"history" | "maintenance">("history");
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -82,41 +128,50 @@ export default function AssetDetailPage() {
     notes: "",
   });
 
-  const fetchAsset = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/assets/${id}`);
-      if (!res.ok) {
-        throw new Error("Gagal mengambil data aset.");
-      }
-      const data = await res.json();
-      setAsset(data.asset);
-    } catch (err: any) {
-      console.error(err);
-      setFeedbackMsg({ type: "error", text: err.message });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchUsers = async () => {
-    try {
-      const res = await fetch("/api/users");
-      if (res.ok) {
-        const data = await res.json();
-        setUsers(data.users || []);
-      }
-    } catch (err) {
-      console.error("Failed to load users:", err);
-    }
-  };
-
   useEffect(() => {
-    if (id) {
-      fetchAsset();
-      fetchUsers();
+    if (!id) return;
+    let cancelled = false;
+    async function loadAsset() {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/assets/${id}`);
+        if (!res.ok) {
+          throw new Error("Gagal mengambil data aset.");
+        }
+        const data = (await res.json()) as { asset: AssetDetail | null };
+        if (cancelled) return;
+        setAsset(data.asset);
+      } catch (err) {
+        console.error(err);
+        if (cancelled) return;
+        setFeedbackMsg({
+          type: "error",
+          text: err instanceof Error ? err.message : "Gagal mengambil data aset.",
+        });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-  }, [id]);
+    async function loadUsers() {
+      try {
+        const res = await fetch("/api/users");
+        if (res.ok) {
+          const data = (await res.json()) as { users?: UserOption[] };
+          if (cancelled) return;
+          setUsers(data.users || []);
+        }
+      } catch (err) {
+        console.error("Failed to load users:", err);
+      }
+    }
+    void loadAsset();
+    void loadUsers();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const handleTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,14 +184,14 @@ export default function AssetDetailPage() {
         body: JSON.stringify(transferForm),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string; message?: string };
       if (!res.ok) throw new Error(data.error || "Gagal mencatat mutasi aset.");
 
       setFeedbackMsg({ type: "success", text: data.message || "Mutasi aset berhasil dicatat!" });
       setTransferOpen(false);
-      fetchAsset();
-    } catch (err: any) {
-      setFeedbackMsg({ type: "error", text: err.message });
+      refresh();
+    } catch (err) {
+      setFeedbackMsg({ type: "error", text: err instanceof Error ? err.message : "Gagal mencatat mutasi aset." });
     } finally {
       setTransferring(false);
     }
@@ -153,14 +208,14 @@ export default function AssetDetailPage() {
         body: JSON.stringify(maintenanceForm),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error || "Gagal mencatat pemeliharaan.");
 
       setFeedbackMsg({ type: "success", text: "Data pemeliharaan berhasil dicatat!" });
       setMaintenanceOpen(false);
-      fetchAsset();
-    } catch (err: any) {
-      setFeedbackMsg({ type: "error", text: err.message });
+      refresh();
+    } catch (err) {
+      setFeedbackMsg({ type: "error", text: err instanceof Error ? err.message : "Gagal mencatat pemeliharaan." });
     } finally {
       setSavingMaintenance(false);
     }
@@ -177,14 +232,14 @@ export default function AssetDetailPage() {
         body: JSON.stringify(disposalForm),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error || "Gagal menghapusbukukan aset.");
 
       setFeedbackMsg({ type: "success", text: "Aset berhasil dihapusbukukan (Disposed)!" });
       setDisposalOpen(false);
-      fetchAsset();
-    } catch (err: any) {
-      setFeedbackMsg({ type: "error", text: err.message });
+      refresh();
+    } catch (err) {
+      setFeedbackMsg({ type: "error", text: err instanceof Error ? err.message : "Gagal menghapusbukukan aset." });
     } finally {
       setDisposing(false);
     }
@@ -483,7 +538,7 @@ export default function AssetDetailPage() {
                 </div>
               ) : (
                 <div className="relative pl-6 border-l-2 border-muted space-y-6">
-                  {asset.histories.map((h: any) => (
+                  {asset.histories.map((h: AssetHistoryEntry) => (
                     <div key={h.id} className="relative group">
                       {/* Timeline dot */}
                       <div className="absolute -left-[31px] top-1 h-4 w-4 rounded-full border-2 border-background bg-primary" />
@@ -536,7 +591,7 @@ export default function AssetDetailPage() {
                           </div>
                         </div>
 
-                        {h.notes && <p className="text-xs text-foreground/90 italic">"{h.notes}"</p>}
+                        {h.notes && <p className="text-xs text-foreground/90 italic">&quot;{h.notes}&quot;</p>}
 
                         <div className="text-[11px] text-muted-foreground text-right pt-1">
                           Dicatat oleh: <span className="font-medium">{h.performedBy?.fullName || "Sistem"}</span>
@@ -577,7 +632,7 @@ export default function AssetDetailPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {asset.maintenances.map((m: any) => (
+                  {asset.maintenances.map((m: AssetMaintenanceRecord) => (
                     <div
                       key={m.id}
                       className="p-4 rounded-lg border bg-card hover:bg-muted/30 transition-colors space-y-3"

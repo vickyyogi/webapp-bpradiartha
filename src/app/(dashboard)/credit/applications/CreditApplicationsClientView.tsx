@@ -5,19 +5,11 @@ import Link from "next/link";
 import {
   PlusCircle,
   Search,
-  FileText,
-  User,
-  Calendar,
   CheckCircle,
-  Clock,
-  ShieldCheck,
-  MapPin,
-  AlertCircle,
   Edit2,
   Trash2,
   ArrowRight,
   Upload,
-  Image as ImageIcon,
   Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -339,8 +331,8 @@ export function CreditApplicationsClientView({
 
       setIsAddModalOpen(false);
       resetForm();
-    } catch (err: any) {
-      setErrorMessage(err.message || "Terjadi kesalahan sistem.");
+    } catch (err) {
+      setErrorMessage((err instanceof Error ? err.message : "") || "Terjadi kesalahan sistem.");
     } finally {
       setIsSubmitting(false);
     }
@@ -368,8 +360,8 @@ export function CreditApplicationsClientView({
       setApplications(applications.map((a) => (a.id === editingApp.id ? json.data : a)));
       setIsEditModalOpen(false);
       setEditingApp(null);
-    } catch (err: any) {
-      setErrorMessage(err.message || "Terjadi kesalahan sistem.");
+    } catch (err) {
+      setErrorMessage((err instanceof Error ? err.message : "") || "Terjadi kesalahan sistem.");
     } finally {
       setIsSubmitting(false);
     }
@@ -391,7 +383,7 @@ export function CreditApplicationsClientView({
 
       const json = await res.json();
       setApplications(applications.map((a) => (a.id === appId ? json.data : a)));
-    } catch (err: any) {
+    } catch {
       alert("Terjadi kesalahan saat mengubah status");
     }
   };
@@ -411,7 +403,7 @@ export function CreditApplicationsClientView({
       }
 
       setApplications(applications.filter((a) => a.id !== appId));
-    } catch (err) {
+    } catch {
       alert("Gagal menghapus berkas pengajuan");
     }
   };

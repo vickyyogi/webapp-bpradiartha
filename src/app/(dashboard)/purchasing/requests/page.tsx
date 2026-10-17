@@ -1,18 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  FileCheck,
   PlusCircle,
   Search,
   RefreshCw,
   Eye,
   Trash2,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  Building,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,9 +23,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+interface PurchaseRequestRow {
+  id: string;
+  requestNumber: string;
+  title: string;
+  purpose?: string;
+  status: string;
+  totalEstimatedAmount: number;
+  requester?: { fullName?: string };
+  department?: { name?: string };
+}
+
 export default function PurchaseRequestsPage() {
-  const [requests, setRequests] = useState<any[]>([]);
-  const [summary, setSummary] = useState<any>({ total: 0, submitted: 0, approved: 0, rejected: 0, totalAmount: 0 });
+  const [requests, setRequests] = useState<PurchaseRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -50,29 +55,35 @@ export default function PurchaseRequestsPage() {
     ],
   });
 
-  const fetchRequests = async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      if (statusFilter !== "ALL") params.set("status", statusFilter);
-
-      const res = await fetch(`/api/purchasing/requests?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setRequests(data.requests || []);
-        setSummary(data.summary || {});
-      }
-    } catch (err) {
-      console.error("Failed to load purchase requests:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
-    fetchRequests();
-  }, [search, statusFilter]);
+    let cancelled = false;
+    async function load() {
+      try {
+        setLoading(true);
+        const params = new URLSearchParams();
+        if (search) params.set("search", search);
+        if (statusFilter !== "ALL") params.set("status", statusFilter);
+
+        const res = await fetch(`/api/purchasing/requests?${params.toString()}`);
+        if (res.ok) {
+          const data = (await res.json()) as { requests: PurchaseRequestRow[] };
+          if (cancelled) return;
+          setRequests(data.requests || []);
+        }
+      } catch (err) {
+        console.error("Failed to load purchase requests:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [search, statusFilter, refreshKey]);
 
   const handleAddItemRow = () => {
     setForm({
@@ -90,7 +101,7 @@ export default function PurchaseRequestsPage() {
     setForm({ ...form, items: newItems });
   };
 
-  const handleItemChange = (index: number, field: string, value: any) => {
+  const handleItemChange = (index: number, field: string, value: string | number) => {
     const updated = [...form.items];
     updated[index] = { ...updated[index], [field]: value };
     setForm({ ...form, items: updated });
@@ -114,7 +125,7 @@ export default function PurchaseRequestsPage() {
         body: JSON.stringify(form),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error || "Gagal mengajukan pengadaan.");
 
       setFeedbackMsg({ type: "success", text: "Pengajuan pengadaan barang (PR) berhasil diserahkan untuk proses approval!" });
@@ -128,9 +139,12 @@ export default function PurchaseRequestsPage() {
           { itemName: "", category: "Formulir & Kertas", unit: "Rim", quantity: 1, estimatedPrice: 0, itemType: "INVENTORY" },
         ],
       });
-      fetchRequests();
-    } catch (err: any) {
-      setFeedbackMsg({ type: "error", text: err.message });
+      refresh();
+    } catch (err) {
+      setFeedbackMsg({
+        type: "error",
+        text: err instanceof Error ? err.message : "Gagal mengajukan pengadaan.",
+      });
     } finally {
       setCreating(false);
     }
@@ -205,7 +219,7 @@ export default function PurchaseRequestsPage() {
                 <option value="DRAFT">DRAFT (Revisi)</option>
               </select>
 
-              <Button variant="ghost" size="sm" onClick={fetchRequests} className="gap-1 text-xs">
+              <Button variant="ghost" size="sm" onClick={refresh} className="gap-1 text-xs">
                 <RefreshCw className="h-3.5 w-3.5" /> Segarkan
               </Button>
             </div>

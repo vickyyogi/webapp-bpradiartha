@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Building2,
   PlusCircle,
   Search,
   RefreshCw,
@@ -11,9 +10,8 @@ import {
   Mail,
   CreditCard,
   MapPin,
-  ShoppingCart,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,8 +35,23 @@ const CATEGORIES = [
   "Lainnya",
 ];
 
+interface Vendor {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  bankName: string;
+  bankAccount?: string;
+  bankHolder?: string;
+  _count?: { purchaseOrders: number };
+}
+
 export default function VendorsPage() {
-  const [vendors, setVendors] = useState<any[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState("ALL");
@@ -61,28 +74,35 @@ export default function VendorsPage() {
     bankHolder: "",
   });
 
-  const fetchVendors = async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      if (selectedCat !== "ALL") params.set("category", selectedCat);
-
-      const res = await fetch(`/api/purchasing/vendors?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setVendors(data.vendors || []);
-      }
-    } catch (err) {
-      console.error("Failed to load vendors:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
-    fetchVendors();
-  }, [search, selectedCat]);
+    let cancelled = false;
+    async function load() {
+      try {
+        setLoading(true);
+        const params = new URLSearchParams();
+        if (search) params.set("search", search);
+        if (selectedCat !== "ALL") params.set("category", selectedCat);
+
+        const res = await fetch(`/api/purchasing/vendors?${params.toString()}`);
+        if (res.ok) {
+          const data = (await res.json()) as { vendors: Vendor[] };
+          if (cancelled) return;
+          setVendors(data.vendors || []);
+        }
+      } catch (err) {
+        console.error("Failed to load vendors:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [search, selectedCat, refreshKey]);
 
   const handleCreateVendor = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +115,7 @@ export default function VendorsPage() {
         body: JSON.stringify(form),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error || "Gagal mendaftarkan vendor.");
 
       setFeedbackMsg({ type: "success", text: "Vendor rekanan baru berhasil didaftarkan!" });
@@ -112,9 +132,12 @@ export default function VendorsPage() {
         bankAccount: "",
         bankHolder: "",
       });
-      fetchVendors();
-    } catch (err: any) {
-      setFeedbackMsg({ type: "error", text: err.message });
+      refresh();
+    } catch (err) {
+      setFeedbackMsg({
+        type: "error",
+        text: err instanceof Error ? err.message : "Gagal mendaftarkan vendor.",
+      });
     } finally {
       setCreating(false);
     }
@@ -189,7 +212,7 @@ export default function VendorsPage() {
                 ))}
               </select>
 
-              <Button variant="ghost" size="sm" onClick={fetchVendors} className="gap-1 text-xs">
+              <Button variant="ghost" size="sm" onClick={refresh} className="gap-1 text-xs">
                 <RefreshCw className="h-3.5 w-3.5" /> Segarkan
               </Button>
             </div>

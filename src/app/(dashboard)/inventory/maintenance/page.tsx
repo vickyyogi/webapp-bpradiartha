@@ -1,59 +1,63 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Wrench,
   Search,
-  Filter,
-  ArrowLeft,
-  Calendar,
-  DollarSign,
   Laptop,
-  CheckCircle2,
-  Clock,
   RefreshCw,
-  ExternalLink,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
-export default function MaintenanceSchedulePage() {
-  const [assets, setAssets] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+interface MaintenanceAsset {
+  id: string;
+  name: string;
+  assetNumber: string;
+  vendor?: string | null;
+  status: string;
+  category: string;
+  location?: string | null;
+  currentHolder?: { fullName?: string } | null;
+  condition: string;
+  _count?: { maintenances?: number };
+}
 
-  const fetchMaintenances = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/assets");
-      if (res.ok) {
-        const data = await res.json();
-        setAssets(data.assets || []);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+export default function MaintenanceSchedulePage() {
+  const [assets, setAssets] = useState<MaintenanceAsset[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    fetchMaintenances();
-  }, []);
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/assets");
+        if (res.ok) {
+          const data = (await res.json()) as { assets?: MaintenanceAsset[] };
+          if (cancelled) return;
+          setAssets(data.assets || []);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
 
-  // Collect all maintenances with their parent asset info
-  const allMaintenances: any[] = [];
-  assets.forEach((asset) => {
-    // If asset has maintenances array (or fetch individually if needed)
-  });
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
-  // Let's create an API route for maintenances or fetch all maintenances from /api/assets/maintenance
   return (
-    <MaintenanceListClient assets={assets} loading={loading} onRefresh={fetchMaintenances} />
+    <MaintenanceListClient assets={assets} loading={loading} onRefresh={refresh} />
   );
 }
 
@@ -62,7 +66,7 @@ function MaintenanceListClient({
   loading,
   onRefresh,
 }: {
-  assets: any[];
+  assets: MaintenanceAsset[];
   loading: boolean;
   onRefresh: () => void;
 }) {
@@ -84,8 +88,6 @@ function MaintenanceListClient({
 
     return matchesSearch && matchesStatus;
   });
-
-  const totalCost = assets.reduce((acc, a) => acc + (a._count?.maintenances || 0), 0);
 
   return (
     <div className="space-y-6">

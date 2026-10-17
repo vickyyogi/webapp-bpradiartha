@@ -1,53 +1,78 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  ShoppingCart,
   Search,
   RefreshCw,
   Eye,
-  CheckCircle2,
-  Clock,
-  Building2,
   PlusCircle,
-  PackageCheck,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
+interface PurchaseOrderSummary {
+  total?: number;
+  issued?: number;
+  partial?: number;
+  completed?: number;
+  totalValue?: number;
+}
+
+interface PurchaseOrderListItem {
+  id: string;
+  poNumber: string;
+  status: string;
+  poDate: string;
+  paymentTerms?: string;
+  totalAmount?: number;
+  vendor?: {
+    name?: string;
+    category?: string;
+    phone?: string;
+  };
+  _count?: { goodsReceipts?: number };
+}
+
 export default function PurchaseOrdersPage() {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [summary, setSummary] = useState<any>({ total: 0, issued: 0, partial: 0, completed: 0, totalValue: 0 });
+  const [orders, setOrders] = useState<PurchaseOrderListItem[]>([]);
+  const [summary, setSummary] = useState<PurchaseOrderSummary>({ total: 0, issued: 0, partial: 0, completed: 0, totalValue: 0 });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-
-  const fetchOrders = async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      if (statusFilter !== "ALL") params.set("status", statusFilter);
-
-      const res = await fetch(`/api/purchasing/orders?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setOrders(data.orders || []);
-        setSummary(data.summary || {});
-      }
-    } catch (err) {
-      console.error("Failed to load purchase orders:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    fetchOrders();
-  }, [search, statusFilter]);
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (search) params.set("search", search);
+        if (statusFilter !== "ALL") params.set("status", statusFilter);
+
+        const res = await fetch(`/api/purchasing/orders?${params.toString()}`);
+        if (res.ok) {
+          const data = (await res.json()) as { orders?: PurchaseOrderListItem[]; summary?: PurchaseOrderSummary };
+          if (cancelled) return;
+          setOrders(data.orders || []);
+          setSummary(data.summary || {});
+        }
+      } catch (err) {
+        console.error("Failed to load purchase orders:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [search, statusFilter, refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   return (
     <div className="space-y-6">
@@ -157,7 +182,7 @@ export default function PurchaseOrdersPage() {
                 <option value="CANCELLED">CANCELLED (Dibatalkan)</option>
               </select>
 
-              <Button variant="ghost" size="sm" onClick={fetchOrders} className="gap-1 text-xs">
+              <Button variant="ghost" size="sm" onClick={refresh} className="gap-1 text-xs">
                 <RefreshCw className="h-3.5 w-3.5" /> Segarkan
               </Button>
             </div>

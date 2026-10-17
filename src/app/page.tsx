@@ -26,9 +26,6 @@ import {
   Wallet,
   TrendingUp,
   Clock,
-  Home,
-  ListTree,
-  Info,
   ChevronRight,
   Zap,
 } from "lucide-react";
@@ -288,28 +285,6 @@ export default function PublicLandingPage() {
         />
         <div aria-hidden="true" className="lp-dots absolute right-8 top-28 h-40 w-56 opacity-70 hidden lg:block" />
         <div aria-hidden="true" className="lp-dots absolute left-1/2 bottom-10 h-28 w-40 opacity-50 hidden lg:block" />
-
-        {/* Floating quick-nav rail */}
-        <nav
-          aria-label="Navigasi cepat"
-          className="absolute left-6 top-1/2 z-20 hidden -translate-y-1/2 xl:flex flex-col gap-2 rounded-full border border-lp-border bg-lp-card/80 p-2.5 shadow-xl backdrop-blur-md"
-        >
-          <a href="#beranda" aria-label="Beranda" className="lp-circle lp-circle-dark h-10 w-10">
-            <Home className="h-4 w-4" />
-          </a>
-          <a href="#produk" aria-label="Produk" className="lp-circle lp-circle-light h-10 w-10">
-            <ListTree className="h-4 w-4" />
-          </a>
-          <a href="#simulasi-kredit" aria-label="Simulasi kredit" className="lp-circle lp-circle-light h-10 w-10">
-            <Calculator className="h-4 w-4" />
-          </a>
-          <a href="#form-pengajuan" aria-label="Formulir pengajuan" className="lp-circle lp-circle-light h-10 w-10">
-            <Send className="h-4 w-4" />
-          </a>
-          <a href="#faq" aria-label="Tanya jawab" className="lp-circle lp-circle-light h-10 w-10">
-            <Info className="h-4 w-4" />
-          </a>
-        </nav>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-14 pb-24 lg:pt-20 lg:pb-32">
           <div className="grid lg:grid-cols-12 gap-12 items-center">

@@ -2,22 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  Calendar,
   CheckCircle2,
-  Clock,
-  FileCheck,
   FileText,
   MapPin,
   Save,
   ShieldCheck,
-  User,
   Users,
-  AlertTriangle,
-  Send,
-  Building,
   DollarSign,
   History,
   CheckSquare,
@@ -37,6 +29,93 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+type AnalysisData = {
+  slikStatus?: string;
+  characterNotes?: string;
+  monthlyIncome?: string | number;
+  monthlyExpense?: string | number;
+  installmentCapacity?: string | number;
+  dsrRatio?: string | number;
+  collateralType?: string;
+  collateralAddress?: string;
+  marketValue?: string | number;
+  liquidationValue?: string | number;
+  businessCondition?: string;
+  marketRisk?: string;
+  analystRecommendation?: string;
+  analystNotes?: string;
+};
+
+type SurveyData = {
+  surveyDate?: string;
+  surveyLocation?: string;
+  interviewee?: string;
+  businessStatus?: string;
+  physicalCondition?: string;
+  surveyFindingNotes?: string;
+  surveyRecommendation?: string;
+};
+
+type StatusHistoryItem = {
+  id: string;
+  status: string;
+  notes?: string | null;
+  createdAt: string | Date;
+  changedBy?: { fullName?: string | null; email?: string | null } | null;
+};
+
+type ApprovalRecordItem = {
+  id: string;
+  approverRoleName: string;
+  status: string;
+  approvedAmount?: number | null;
+  notes?: string | null;
+  createdAt: string | Date;
+  approver?: { fullName?: string | null } | null;
+};
+
+type DocumentItem = {
+  id: string;
+  fileName: string;
+  documentType: string;
+  notes?: string | null;
+  createdAt: string | Date;
+  downloadUrl?: string;
+  uploadedBy?: { fullName?: string | null } | null;
+};
+
+type CreditApplicationDetail = {
+  id: string;
+  applicationNumber: string;
+  status: string;
+  product?: string | null;
+  requestedAmount?: number | null;
+  requestedTenorMonths?: number | null;
+  purpose?: string | null;
+  source?: string | null;
+  notes?: string | null;
+  submissionDate?: string | Date | null;
+  approvedAmount?: number | null;
+  approvedTenorMonths?: number | null;
+  interestRate?: number | null;
+  conditions?: string | null;
+  decisionNotes?: string | null;
+  decisionDate?: string | Date | null;
+  realizationReference?: string | null;
+  realizationAmount?: number | null;
+  realizationDate?: string | Date | null;
+  analysisData?: AnalysisData | null;
+  surveyData?: SurveyData | null;
+  customer?: { legalName?: string | null; phone?: string | null; email?: string | null } | null;
+  branch?: { name?: string | null } | null;
+  marketingOfficer?: { fullName?: string | null } | null;
+  analyst?: { fullName?: string | null } | null;
+  surveyOfficer?: { fullName?: string | null } | null;
+  decisionMaker?: { fullName?: string | null } | null;
+  statusHistories?: StatusHistoryItem[];
+  approvalRecords?: ApprovalRecordItem[];
+};
+
 const STATUS_ORDER: Array<{
   key: string;
   label: string;
@@ -54,21 +133,19 @@ const STATUS_ORDER: Array<{
 
 export function CreditApplicationDetailClientView({
   application: initialApp,
-  users,
   initialDocuments = [],
 }: {
-  application: any;
+  application: CreditApplicationDetail;
   users: Array<{ id: string; fullName: string; email: string }>;
-  initialDocuments?: any[];
+  initialDocuments?: DocumentItem[];
 }) {
-  const router = useRouter();
   const [app, setApp] = useState(initialApp);
   const [activeTab, setActiveTab] = useState<"summary" | "analysis" | "survey" | "decision" | "realization" | "history" | "documents">("summary");
   const [isSaving, setIsSaving] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Documents State
-  const [documents, setDocuments] = useState<any[]>(initialDocuments);
+  const [documents, setDocuments] = useState<DocumentItem[]>(initialDocuments);
   const [isUploadDocOpen, setIsUploadDocOpen] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [docFile, setDocFile] = useState<File | null>(null);
@@ -76,7 +153,7 @@ export function CreditApplicationDetailClientView({
   const [docNotes, setDocNotes] = useState("");
 
   // Analysis Form State (5C)
-  const existingAnalysis = app.analysisData || {};
+  const existingAnalysis: AnalysisData = app.analysisData || {};
   const [analysisData, setAnalysisData] = useState({
     slikStatus: existingAnalysis.slikStatus || "LANCAR (Kol 1)",
     characterNotes: existingAnalysis.characterNotes || "",
@@ -95,7 +172,7 @@ export function CreditApplicationDetailClientView({
   });
 
   // Survey Form State
-  const existingSurvey = app.surveyData || {};
+  const existingSurvey: SurveyData = app.surveyData || {};
   const [surveyData, setSurveyData] = useState({
     surveyDate: existingSurvey.surveyDate || "",
     surveyLocation: existingSurvey.surveyLocation || "",
@@ -141,8 +218,8 @@ export function CreditApplicationDetailClientView({
       if (!res.ok) throw new Error(json.error || "Gagal menyimpan analisis.");
       setApp(json.data);
       showNotification("success", "Analisis Kelayakan 5C berhasil disimpan!");
-    } catch (e: any) {
-      showNotification("error", e.message);
+    } catch (e) {
+      showNotification("error", e instanceof Error ? e.message : "");
     } finally {
       setIsSaving(false);
     }
@@ -160,8 +237,8 @@ export function CreditApplicationDetailClientView({
       if (!res.ok) throw new Error(json.error || "Gagal menyimpan data survey.");
       setApp(json.data);
       showNotification("success", "Hasil survey lapangan berhasil disimpan!");
-    } catch (e: any) {
-      showNotification("error", e.message);
+    } catch (e) {
+      showNotification("error", e instanceof Error ? e.message : "");
     } finally {
       setIsSaving(false);
     }
@@ -170,7 +247,7 @@ export function CreditApplicationDetailClientView({
   const handleSaveDecision = async (statusOverride?: string) => {
     setIsSaving(true);
     try {
-      const payload: any = {
+      const payload = {
         ...decisionData,
         status: statusOverride || decisionData.status,
       };
@@ -185,8 +262,8 @@ export function CreditApplicationDetailClientView({
       setApp(json.data);
       setDecisionData((prev) => ({ ...prev, status: json.data.status, statusChangeNote: "" }));
       showNotification("success", `Keputusan kredit status ${json.data.status} berhasil dicatat.`);
-    } catch (e: any) {
-      showNotification("error", e.message);
+    } catch (e) {
+      showNotification("error", e instanceof Error ? e.message : "");
     } finally {
       setIsSaving(false);
     }
@@ -204,8 +281,8 @@ export function CreditApplicationDetailClientView({
       if (!res.ok) throw new Error(json.error || "Gagal mencatat realisasi.");
       setApp(json.data);
       showNotification("success", "Pencatatan realisasi kredit berhasil disimpan!");
-    } catch (e: any) {
-      showNotification("error", e.message);
+    } catch (e) {
+      showNotification("error", e instanceof Error ? e.message : "");
     } finally {
       setIsSaving(false);
     }
@@ -227,8 +304,8 @@ export function CreditApplicationDetailClientView({
       if (!res.ok) throw new Error(json.error || "Gagal memperbarui status.");
       setApp(json.data);
       showNotification("success", `Status pengajuan berhasil diubah menjadi ${nextStatus}.`);
-    } catch (e: any) {
-      showNotification("error", e.message);
+    } catch (e) {
+      showNotification("error", e instanceof Error ? e.message : "");
     } finally {
       setIsSaving(false);
     }
@@ -259,8 +336,8 @@ export function CreditApplicationDetailClientView({
       setDocFile(null);
       setDocNotes("");
       showNotification("success", "Dokumen berhasil diunggah ke berkas pengajuan ini!");
-    } catch (e: any) {
-      showNotification("error", e.message);
+    } catch (e) {
+      showNotification("error", e instanceof Error ? e.message : "");
     } finally {
       setIsUploadingDoc(false);
     }
@@ -1001,7 +1078,7 @@ export function CreditApplicationDetailClientView({
                   Daftar Rekam Jejak Persetujuan Komite ({app.approvalRecords.length})
                 </h4>
                 <div className="divide-y rounded-md border text-xs">
-                  {app.approvalRecords.map((rec: any) => (
+                  {app.approvalRecords.map((rec: ApprovalRecordItem) => (
                     <div key={rec.id} className="p-3 flex items-center justify-between">
                       <div>
                         <div className="font-semibold text-sm">{rec.approver?.fullName || "Pejabat Pemutus"}</div>
@@ -1107,7 +1184,7 @@ export function CreditApplicationDetailClientView({
               </div>
             ) : (
               <div className="relative border-l border-border ml-4 space-y-6 py-2">
-                {app.statusHistories.map((h: any) => (
+                {app.statusHistories.map((h: StatusHistoryItem) => (
                   <div key={h.id} className="relative pl-6">
                     <div className="absolute -left-1.5 top-1.5 h-3 w-3 rounded-full border-2 border-background bg-primary" />
                     <div className="flex items-center gap-2">
@@ -1158,7 +1235,7 @@ export function CreditApplicationDetailClientView({
               </div>
             ) : (
               <div className="divide-y divide-border rounded-md border text-sm">
-                {documents.map((doc: any) => (
+                {documents.map((doc: DocumentItem) => (
                   <div key={doc.id} className="p-3.5 flex items-center justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">

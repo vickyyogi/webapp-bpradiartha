@@ -1,20 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  Boxes,
   ArrowLeft,
   ArrowDownLeft,
   ArrowUpRight,
   RefreshCw,
   Clock,
   MapPin,
-  Tag,
-  DollarSign,
-  AlertTriangle,
-  CheckCircle2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,13 +25,39 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+interface ItemTransaction {
+  id: string;
+  type: string;
+  quantity: number;
+  stockBefore: number;
+  stockAfter: number;
+  referenceNumber?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  performedBy?: { fullName?: string } | null;
+}
+
+interface InventoryItemDetail {
+  id: string;
+  name: string;
+  itemCode: string;
+  category: string;
+  unit: string;
+  currentStock: number;
+  minStock: number;
+  unitPrice?: number | null;
+  storageLocation?: string | null;
+  branch?: { name?: string } | null;
+  transactions: ItemTransaction[];
+}
+
 export default function InventoryItemDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params?.id as string;
 
-  const [item, setItem] = useState<any>(null);
+  const [item, setItem] = useState<InventoryItemDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Movement Modal
@@ -49,26 +70,37 @@ export default function InventoryItemDetailPage() {
     notes: "",
   });
 
-  const fetchItemDetail = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/inventory/items/${id}`);
-      if (!res.ok) {
-        throw new Error("Gagal mengambil data barang.");
-      }
-      const data = await res.json();
-      setItem(data.item);
-    } catch (err: any) {
-      console.error(err);
-      setFeedbackMsg({ type: "error", text: err.message });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    if (id) fetchItemDetail();
-  }, [id]);
+    if (!id) return;
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/inventory/items/${id}`);
+        if (!res.ok) {
+          throw new Error("Gagal mengambil data barang.");
+        }
+        const data = (await res.json()) as { item: InventoryItemDetail | null };
+        if (cancelled) return;
+        setItem(data.item);
+      } catch (err) {
+        console.error(err);
+        if (cancelled) return;
+        setFeedbackMsg({
+          type: "error",
+          text: err instanceof Error ? err.message : "Gagal mengambil data barang.",
+        });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const handleRecordMovement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,7 +117,7 @@ export default function InventoryItemDetailPage() {
         }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string; newStock?: number };
       if (!res.ok) {
         throw new Error(data.error || "Gagal mencatat mutasi stok.");
       }
@@ -95,9 +127,9 @@ export default function InventoryItemDetailPage() {
         text: `Mutasi berhasil! Stok sekarang: ${data.newStock} ${item.unit}.`,
       });
       setMovementOpen(false);
-      fetchItemDetail();
-    } catch (err: any) {
-      setFeedbackMsg({ type: "error", text: err.message });
+      refresh();
+    } catch (err) {
+      setFeedbackMsg({ type: "error", text: err instanceof Error ? err.message : "Gagal mencatat mutasi stok." });
     } finally {
       setMoving(false);
     }
@@ -286,7 +318,7 @@ export default function InventoryItemDetailPage() {
               Catatan historis seluruh penerimaan, pemakaian operasional, dan stock opname barang ini
             </CardDescription>
           </div>
-          <Button variant="ghost" size="sm" onClick={fetchItemDetail} className="gap-1 text-xs">
+          <Button variant="ghost" size="sm" onClick={refresh} className="gap-1 text-xs">
             <RefreshCw className="h-3.5 w-3.5" /> Segarkan
           </Button>
         </CardHeader>
@@ -310,7 +342,7 @@ export default function InventoryItemDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {item.transactions.map((tx: any) => {
+                  {item.transactions.map((tx: ItemTransaction) => {
                     const isStockIn = tx.type === "STOCK_IN";
                     const isStockOut = tx.type === "STOCK_OUT";
 

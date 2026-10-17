@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Table,
   TableBody,
@@ -18,9 +18,28 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Edit, Trash2, Plus, Search } from "lucide-react";
 
+interface Permission {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface RolePermission {
+  permission: { id: string; name: string };
+}
+
+interface Role {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  isSystem: boolean;
+  permissions?: RolePermission[];
+}
+
 export default function RolesPage() {
-  const [roles, setRoles] = useState<any[]>([]);
-  const [permissions, setPermissions] = useState<any[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -28,38 +47,46 @@ export default function RolesPage() {
   const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const permsRes = await fetch("/api/admin/permissions");
+        let perms = (await permsRes.json()) as Permission[];
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const permsRes = await fetch("/api/admin/permissions");
-      let perms = await permsRes.json();
-      
-      if (!permsRes.ok) throw new Error("Failed to fetch permissions");
+        if (!permsRes.ok) throw new Error("Failed to fetch permissions");
 
-      if (perms.length === 0) {
-        // Auto-seed
-        await fetch("/api/admin/permissions", { method: "POST" });
-        const newPermsRes = await fetch("/api/admin/permissions");
-        perms = await newPermsRes.json();
+        if (perms.length === 0) {
+          // Auto-seed
+          await fetch("/api/admin/permissions", { method: "POST" });
+          const newPermsRes = await fetch("/api/admin/permissions");
+          perms = (await newPermsRes.json()) as Permission[];
+        }
+
+        if (cancelled) return;
+        setPermissions(perms);
+
+        const rolesRes = await fetch("/api/admin/roles");
+        if (!rolesRes.ok) throw new Error("Failed to fetch roles");
+        const r = (await rolesRes.json()) as Role[];
+        if (cancelled) return;
+        setRoles(r);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      setPermissions(perms);
-
-      const rolesRes = await fetch("/api/admin/roles");
-      if (!rolesRes.ok) throw new Error("Failed to fetch roles");
-      const r = await rolesRes.json();
-      setRoles(r);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
     }
-  };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const handleOpenNew = () => {
     setFormData({ id: "", code: "", name: "", description: "" });
@@ -68,14 +95,14 @@ export default function RolesPage() {
     setIsOpen(true);
   };
 
-  const handleOpenEdit = (role: any) => {
+  const handleOpenEdit = (role: Role) => {
     setFormData({
       id: role.id,
       code: role.code,
       name: role.name,
       description: role.description || "",
     });
-    setSelectedPerms(role.permissions?.map((rp: any) => rp.permission.id) || []);
+    setSelectedPerms(role.permissions?.map((rp: RolePermission) => rp.permission.id) || []);
     setIsEditing(true);
     setIsOpen(true);
   };
@@ -89,9 +116,9 @@ export default function RolesPage() {
       try {
         const res = await fetch(`/api/admin/roles/${id}`, { method: "DELETE" });
         if (res.ok) {
-          fetchData();
+          refresh();
         } else {
-          const data = await res.json();
+          const data = (await res.json()) as { error?: string };
           alert(data.error || "Gagal menghapus peran");
         }
       } catch (error) {
@@ -122,9 +149,9 @@ export default function RolesPage() {
 
       if (res.ok) {
         setIsOpen(false);
-        fetchData();
+        refresh();
       } else {
-        const data = await res.json();
+        const data = (await res.json()) as { error?: string };
         alert(data.error || "Gagal menyimpan peran");
       }
     } catch (error) {
@@ -199,7 +226,7 @@ export default function RolesPage() {
                       <TableCell>{role.name}</TableCell>
                       <TableCell>{role.description}</TableCell>
                       <TableCell className="max-w-[300px] flex flex-wrap gap-1 py-2">
-                        {role.permissions?.map((rp: any) => (
+                        {role.permissions?.map((rp: RolePermission) => (
                           <Badge key={rp.permission.id} variant="secondary" className="text-xs">
                             {rp.permission.name}
                           </Badge>

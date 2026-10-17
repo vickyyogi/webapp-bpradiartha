@@ -7,32 +7,63 @@ import {
   Laptop,
   AlertTriangle,
   ArrowRight,
-  TrendingDown,
   Wrench,
   UserCheck,
-  PackagePlus,
-  PlusCircle,
-  FileSpreadsheet,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
+interface InventorySummary {
+  totalItems?: number;
+  lowStockCount?: number;
+  outOfStockCount?: number;
+}
+
+interface LowStockItem {
+  id: string;
+  name: string;
+  itemCode: string;
+  category?: string;
+  storageLocation?: string | null;
+  currentStock: number;
+  minStock: number;
+  unit: string;
+}
+
+interface AssetSummary {
+  totalAssets?: number;
+  assignedCount?: number;
+  maintenanceCount?: number;
+  disposedCount?: number;
+  totalValue?: number;
+}
+
+interface RecentAsset {
+  id: string;
+  name: string;
+  assetNumber: string;
+  category?: string;
+  currentHolder?: { fullName?: string } | null;
+  status: string;
+  condition: string;
+}
+
 export default function InventoryDashboardPage() {
-  const [inventorySummary, setInventorySummary] = useState<any>({
+  const [inventorySummary, setInventorySummary] = useState<InventorySummary>({
     totalItems: 0,
     lowStockCount: 0,
     outOfStockCount: 0,
   });
-  const [lowStockItems, setLowStockItems] = useState<any[]>([]);
-  const [assetSummary, setAssetSummary] = useState<any>({
+  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
+  const [assetSummary, setAssetSummary] = useState<AssetSummary>({
     totalAssets: 0,
     assignedCount: 0,
     maintenanceCount: 0,
     disposedCount: 0,
     totalValue: 0,
   });
-  const [recentAssets, setRecentAssets] = useState<any[]>([]);
+  const [recentAssets, setRecentAssets] = useState<RecentAsset[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -46,17 +77,17 @@ export default function InventoryDashboardPage() {
         ]);
 
         if (invRes.ok) {
-          const invData = await invRes.json();
+          const invData = (await invRes.json()) as { summary?: InventorySummary };
           setInventorySummary(invData.summary || {});
         }
 
         if (lowInvRes.ok) {
-          const lowData = await lowInvRes.json();
+          const lowData = (await lowInvRes.json()) as { items?: LowStockItem[] };
           setLowStockItems(lowData.items || []);
         }
 
         if (assetRes.ok) {
-          const astData = await assetRes.json();
+          const astData = (await assetRes.json()) as { summary?: AssetSummary; assets?: RecentAsset[] };
           setAssetSummary(astData.summary || {});
           setRecentAssets((astData.assets || []).slice(0, 5));
         }
@@ -123,7 +154,7 @@ export default function InventoryDashboardPage() {
               {loading ? "..." : inventorySummary.lowStockCount}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {inventorySummary.outOfStockCount > 0 ? (
+              {(inventorySummary.outOfStockCount ?? 0) > 0 ? (
                 <span className="text-red-600 font-semibold">{inventorySummary.outOfStockCount} stok habis</span>
               ) : (
                 "Di bawah batas minimum"

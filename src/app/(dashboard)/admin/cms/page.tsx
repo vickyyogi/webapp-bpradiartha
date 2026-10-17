@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Globe,
   Plus,
@@ -16,12 +16,9 @@ import {
   Upload,
   Calendar,
   Eye,
-  Layers,
-  Sparkles,
   ArrowLeft,
   Save,
   Send,
-  Link as LinkIcon,
   ShoppingBag,
   Briefcase,
   CreditCard,
@@ -149,7 +146,7 @@ export default function CmsManagementPage() {
   const [galleries, setGalleries] = useState<GalleryItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [reports, setReports] = useState<CmsReport[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   // Report filter states
   const [reportFilterCategory, setReportFilterCategory] = useState("ALL");
@@ -255,36 +252,44 @@ export default function CmsManagementPage() {
   const heroImageInputRef = useRef<HTMLInputElement>(null);
   const pdfFileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [bannersRes, postsRes, faqsRes, galleryRes, productsRes, reportsRes, heroRes] = await Promise.all([
-        fetch("/api/cms/banners"),
-        fetch("/api/cms/posts"),
-        fetch("/api/cms/faqs"),
-        fetch("/api/cms/gallery"),
-        fetch("/api/cms/products"),
-        fetch("/api/cms/reports?active=ALL"),
-        fetch("/api/cms/hero-slides"),
-      ]);
-
-      if (bannersRes.ok) setBanners(await bannersRes.json());
-      if (postsRes.ok) setPosts(await postsRes.json());
-      if (faqsRes.ok) setFaqs(await faqsRes.json());
-      if (galleryRes.ok) setGalleries(await galleryRes.json());
-      if (productsRes.ok) setProducts(await productsRes.json());
-      if (reportsRes.ok) setReports(await reportsRes.json());
-      if (heroRes.ok) setHeroSlides(await heroRes.json());
-    } catch (e) {
-      console.error("Failed to load CMS content:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const [bannersRes, postsRes, faqsRes, galleryRes, productsRes, reportsRes, heroRes] = await Promise.all([
+          fetch("/api/cms/banners"),
+          fetch("/api/cms/posts"),
+          fetch("/api/cms/faqs"),
+          fetch("/api/cms/gallery"),
+          fetch("/api/cms/products"),
+          fetch("/api/cms/reports?active=ALL"),
+          fetch("/api/cms/hero-slides"),
+        ]);
+
+        if (cancelled) return;
+        if (bannersRes.ok) setBanners(await bannersRes.json());
+        if (postsRes.ok) setPosts(await postsRes.json());
+        if (faqsRes.ok) setFaqs(await faqsRes.json());
+        if (galleryRes.ok) setGalleries(await galleryRes.json());
+        if (productsRes.ok) setProducts(await productsRes.json());
+        if (reportsRes.ok) setReports(await reportsRes.json());
+        if (heroRes.ok) setHeroSlides(await heroRes.json());
+      } catch (e) {
+        console.error("Failed to load CMS content:", e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   // Helper for image upload to base64
   const handleFileToBase64 = (
@@ -388,7 +393,7 @@ export default function CmsManagementPage() {
 
       if (res.ok) {
         setProductModalOpen(false);
-        fetchData();
+        refresh();
       } else {
         const data = await res.json();
         alert(data.error || "Gagal menyimpan produk");
@@ -408,7 +413,7 @@ export default function CmsManagementPage() {
 
     try {
       const res = await fetch(`/api/cms/products/${product.id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
+      if (res.ok) refresh();
     } catch (e) {
       console.error("Failed to delete product:", e);
     }
@@ -472,7 +477,7 @@ export default function CmsManagementPage() {
 
       if (res.ok) {
         setIsWritingPost(false);
-        fetchData();
+        refresh();
       } else {
         const data = await res.json();
         alert(data.error || "Gagal menyimpan artikel");
@@ -486,7 +491,7 @@ export default function CmsManagementPage() {
     if (!confirm("Hapus artikel ini secara permanen?")) return;
     try {
       const res = await fetch(`/api/cms/posts/${id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
+      if (res.ok) refresh();
     } catch (e) {
       console.error("Failed to delete post:", e);
     }
@@ -533,7 +538,7 @@ export default function CmsManagementPage() {
 
       if (res.ok) {
         setBannerModalOpen(false);
-        fetchData();
+        refresh();
       }
     } catch (e) {
       console.error("Failed to save banner:", e);
@@ -544,7 +549,7 @@ export default function CmsManagementPage() {
     if (!confirm("Apakah Anda yakin ingin menghapus banner ini?")) return;
     try {
       const res = await fetch(`/api/cms/banners/${id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
+      if (res.ok) refresh();
     } catch (e) {
       console.error("Failed to delete banner:", e);
     }
@@ -596,7 +601,7 @@ export default function CmsManagementPage() {
 
       if (res.ok) {
         setGalleryModalOpen(false);
-        fetchData();
+        refresh();
       } else {
         const data = await res.json();
         alert(data.error || "Gagal menyimpan foto galeri");
@@ -610,7 +615,7 @@ export default function CmsManagementPage() {
     if (!confirm("Hapus foto kegiatan ini?")) return;
     try {
       const res = await fetch(`/api/cms/gallery/${id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
+      if (res.ok) refresh();
     } catch (e) {
       console.error("Failed to delete gallery item:", e);
     }
@@ -703,7 +708,7 @@ export default function CmsManagementPage() {
 
       if (res.ok) {
         setHeroModalOpen(false);
-        fetchData();
+        refresh();
       } else {
         const data = await res.json();
         alert(data.error || "Gagal menyimpan gambar hero");
@@ -717,7 +722,7 @@ export default function CmsManagementPage() {
     if (!confirm("Hapus gambar hero ini dari slideshow?")) return;
     try {
       const res = await fetch(`/api/cms/hero-slides/${id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
+      if (res.ok) refresh();
     } catch (e) {
       console.error("Failed to delete hero slide:", e);
     }
@@ -730,7 +735,7 @@ export default function CmsManagementPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive: !slide.isActive }),
       });
-      if (res.ok) fetchData();
+      if (res.ok) refresh();
     } catch (e) {
       console.error("Failed to toggle hero slide:", e);
     }
@@ -773,7 +778,7 @@ export default function CmsManagementPage() {
 
       if (res.ok) {
         setFaqModalOpen(false);
-        fetchData();
+        refresh();
       }
     } catch (e) {
       console.error("Failed to save FAQ:", e);
@@ -784,7 +789,7 @@ export default function CmsManagementPage() {
     if (!confirm("Hapus pertanyaan FAQ ini?")) return;
     try {
       const res = await fetch(`/api/cms/faqs/${id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
+      if (res.ok) refresh();
     } catch (e) {
       console.error("Failed to delete FAQ:", e);
     }
@@ -898,7 +903,7 @@ export default function CmsManagementPage() {
 
       if (res.ok) {
         setReportModalOpen(false);
-        fetchData();
+        refresh();
       } else {
         const data = await res.json();
         alert(data.error || "Gagal menyimpan laporan");
@@ -913,7 +918,7 @@ export default function CmsManagementPage() {
     if (!confirm("Hapus berkas laporan publikasi ini?")) return;
     try {
       const res = await fetch(`/api/cms/reports/${id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
+      if (res.ok) refresh();
     } catch (e) {
       console.error("Failed to delete report:", e);
     }

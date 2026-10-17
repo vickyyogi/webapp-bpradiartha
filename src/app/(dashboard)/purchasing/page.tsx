@@ -7,22 +7,55 @@ import {
   FileCheck,
   PackageCheck,
   Building2,
-  PlusCircle,
   ArrowRight,
   Clock,
   DollarSign,
-  TrendingUp,
-  FileText,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
+interface PrSummary {
+  total?: number;
+  submitted?: number;
+  approved?: number;
+  rejected?: number;
+  totalAmount?: number;
+}
+
+interface PoSummary {
+  total?: number;
+  issued?: number;
+  partial?: number;
+  completed?: number;
+  totalValue?: number;
+}
+
+interface RecentPurchaseRequest {
+  id: string;
+  title: string;
+  requestNumber: string;
+  status: string;
+  totalEstimatedAmount?: number;
+  requester?: { fullName?: string };
+  _count?: { items?: number };
+}
+
+interface RecentPurchaseOrder {
+  id: string;
+  poNumber: string;
+  status: string;
+  poDate: string;
+  paymentTerms: string;
+  totalAmount?: number;
+  vendor?: { name?: string };
+}
+
 export default function PurchasingDashboardPage() {
-  const [prSummary, setPrSummary] = useState<any>({ total: 0, submitted: 0, approved: 0, rejected: 0, totalAmount: 0 });
-  const [poSummary, setPoSummary] = useState<any>({ total: 0, issued: 0, partial: 0, completed: 0, totalValue: 0 });
-  const [recentPRs, setRecentPRs] = useState<any[]>([]);
-  const [recentPOs, setRecentPOs] = useState<any[]>([]);
+  const [prSummary, setPrSummary] = useState<PrSummary>({ total: 0, submitted: 0, approved: 0, rejected: 0, totalAmount: 0 });
+  const [poSummary, setPoSummary] = useState<PoSummary>({ total: 0, issued: 0, partial: 0, completed: 0, totalValue: 0 });
+  const [recentPRs, setRecentPRs] = useState<RecentPurchaseRequest[]>([]);
+  const [recentPOs, setRecentPOs] = useState<RecentPurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,13 +68,13 @@ export default function PurchasingDashboardPage() {
         ]);
 
         if (prRes.ok) {
-          const prData = await prRes.json();
+          const prData = (await prRes.json()) as { summary?: PrSummary; requests?: RecentPurchaseRequest[] };
           setPrSummary(prData.summary || {});
           setRecentPRs((prData.requests || []).slice(0, 5));
         }
 
         if (poRes.ok) {
-          const poData = await poRes.json();
+          const poData = (await poRes.json()) as { summary?: PoSummary; orders?: RecentPurchaseOrder[] };
           setPoSummary(poData.summary || {});
           setRecentPOs((poData.orders || []).slice(0, 5));
         }

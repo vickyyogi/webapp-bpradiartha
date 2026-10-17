@@ -1,20 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Laptop,
   PlusCircle,
   Search,
-  Filter,
-  UserCheck,
-  Wrench,
-  AlertTriangle,
   RefreshCw,
   Eye,
-  CheckCircle2,
-  DollarSign,
-  ShieldAlert,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,17 +43,45 @@ const STATUSES = [
 
 const CONDITIONS = ["ALL", "GOOD", "FAIR", "DAMAGED", "IN_REPAIR", "DISPOSED"];
 
+interface AssetSummary {
+  totalAssets?: number;
+  assignedCount?: number;
+  maintenanceCount?: number;
+  disposedCount?: number;
+  totalValue?: number;
+}
+
+interface AssetRow {
+  id: string;
+  assetNumber: string;
+  name: string;
+  vendor?: string | null;
+  category: string;
+  serialNumber?: string | null;
+  currentHolder?: { fullName?: string } | null;
+  location?: string | null;
+  condition: string;
+  status: string;
+}
+
+interface AssetUser {
+  id: string;
+  fullName: string;
+  department?: { name?: string } | null;
+}
+
 export default function AssetsPage() {
-  const [assets, setAssets] = useState<any[]>([]);
-  const [summary, setSummary] = useState<any>({
+  const [assets, setAssets] = useState<AssetRow[]>([]);
+  const [summary, setSummary] = useState<AssetSummary>({
     totalAssets: 0,
     assignedCount: 0,
     maintenanceCount: 0,
     disposedCount: 0,
     totalValue: 0,
   });
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<AssetUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Filters
   const [search, setSearch] = useState("");
@@ -89,47 +109,57 @@ export default function AssetsPage() {
     notes: "",
   });
 
-  const fetchAssets = async () => {
-    try {
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      if (category !== "ALL") params.set("category", category);
-      if (status !== "ALL") params.set("status", status);
-      if (condition !== "ALL") params.set("condition", condition);
+      try {
+        const params = new URLSearchParams();
+        if (search) params.set("search", search);
+        if (category !== "ALL") params.set("category", category);
+        if (status !== "ALL") params.set("status", status);
+        if (condition !== "ALL") params.set("condition", condition);
 
-      const res = await fetch(`/api/assets?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setAssets(data.assets || []);
-        setSummary(data.summary || {});
+        const res = await fetch(`/api/assets?${params.toString()}`);
+        if (res.ok) {
+          const data = (await res.json()) as { assets?: AssetRow[]; summary?: AssetSummary };
+          if (cancelled) return;
+          setAssets(data.assets || []);
+          setSummary(data.summary || {});
+        }
+      } catch (err) {
+        console.error("Failed to fetch assets:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch (err) {
-      console.error("Failed to fetch assets:", err);
-    } finally {
-      setLoading(false);
     }
-  };
-
-  const fetchUsers = async () => {
-    try {
-      const res = await fetch("/api/users");
-      if (res.ok) {
-        const data = await res.json();
-        setUsers(data.users || []);
-      }
-    } catch (err) {
-      console.error("Failed to load users:", err);
-    }
-  };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [search, category, status, condition, refreshKey]);
 
   useEffect(() => {
-    fetchAssets();
-  }, [search, category, status, condition]);
-
-  useEffect(() => {
-    fetchUsers();
+    let cancelled = false;
+    async function loadUsers() {
+      try {
+        const res = await fetch("/api/users");
+        if (res.ok) {
+          const data = (await res.json()) as { users?: AssetUser[] };
+          if (cancelled) return;
+          setUsers(data.users || []);
+        }
+      } catch (err) {
+        console.error("Failed to load users:", err);
+      }
+    }
+    void loadUsers();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const handleCreateAsset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,7 +172,7 @@ export default function AssetsPage() {
         body: JSON.stringify(assetForm),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) {
         throw new Error(data.error || "Gagal mendaftarkan aset baru.");
       }
@@ -163,9 +193,9 @@ export default function AssetsPage() {
         condition: "GOOD",
         notes: "",
       });
-      fetchAssets();
-    } catch (err: any) {
-      setFeedbackMsg({ type: "error", text: err.message });
+      refresh();
+    } catch (err) {
+      setFeedbackMsg({ type: "error", text: err instanceof Error ? err.message : "Gagal mendaftarkan aset baru." });
     } finally {
       setCreating(false);
     }
@@ -326,7 +356,7 @@ export default function AssetsPage() {
             <CardTitle className="text-base font-bold">Daftar Peralatan & Aset</CardTitle>
             <CardDescription>Menampilkan {assets.length} aset operasional BPR</CardDescription>
           </div>
-          <Button variant="ghost" size="sm" onClick={fetchAssets} className="gap-1 text-xs">
+          <Button variant="ghost" size="sm" onClick={refresh} className="gap-1 text-xs">
             <RefreshCw className="h-3.5 w-3.5" /> Segarkan
           </Button>
         </CardHeader>

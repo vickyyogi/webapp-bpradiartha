@@ -1,19 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Boxes,
   PlusCircle,
-  ArrowUpDown,
   Search,
-  Filter,
   AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
   RefreshCw,
   Eye,
-  CheckCircle2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +23,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 
 const CATEGORIES = [
@@ -39,13 +34,33 @@ const CATEGORIES = [
   "Lainnya",
 ];
 
+interface ItemSummary {
+  totalItems?: number;
+  lowStockCount?: number;
+  outOfStockCount?: number;
+}
+
+interface InventoryItem {
+  id: string;
+  itemCode: string;
+  name: string;
+  category: string;
+  unit: string;
+  currentStock: number;
+  minStock: number;
+  storageLocation?: string | null;
+  unitPrice?: number | null;
+  notes?: string | null;
+}
+
 export default function InventoryItemsPage() {
-  const [items, setItems] = useState<any[]>([]);
-  const [summary, setSummary] = useState<any>({ totalItems: 0, lowStockCount: 0, outOfStockCount: 0 });
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [summary, setSummary] = useState<ItemSummary>({ totalItems: 0, lowStockCount: 0, outOfStockCount: 0 });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [onlyLowStock, setOnlyLowStock] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Modal State for New Item
   const [newItemOpen, setNewItemOpen] = useState(false);
@@ -64,7 +79,7 @@ export default function InventoryItemsPage() {
 
   // Modal State for Stock Movement (In / Out / Adjustment)
   const [movementOpen, setMovementOpen] = useState(false);
-  const [selectedItemForMove, setSelectedItemForMove] = useState<any>(null);
+  const [selectedItemForMove, setSelectedItemForMove] = useState<InventoryItem | null>(null);
   const [moving, setMoving] = useState(false);
   const [movementForm, setMovementForm] = useState({
     type: "STOCK_IN",
@@ -75,30 +90,36 @@ export default function InventoryItemsPage() {
 
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const fetchItems = async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      if (selectedCategory && selectedCategory !== "ALL") params.set("category", selectedCategory);
-      if (onlyLowStock) params.set("lowStock", "true");
-
-      const res = await fetch(`/api/inventory/items?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setItems(data.items || []);
-        setSummary(data.summary || {});
-      }
-    } catch (err) {
-      console.error("Error fetching inventory items:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchItems();
-  }, [search, selectedCategory, onlyLowStock]);
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (search) params.set("search", search);
+        if (selectedCategory && selectedCategory !== "ALL") params.set("category", selectedCategory);
+        if (onlyLowStock) params.set("lowStock", "true");
+
+        const res = await fetch(`/api/inventory/items?${params.toString()}`);
+        if (res.ok) {
+          const data = (await res.json()) as { items?: InventoryItem[]; summary?: ItemSummary };
+          if (cancelled) return;
+          setItems(data.items || []);
+          setSummary(data.summary || {});
+        }
+      } catch (err) {
+        console.error("Error fetching inventory items:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [search, selectedCategory, onlyLowStock, refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const handleCreateItem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,7 +132,7 @@ export default function InventoryItemsPage() {
         body: JSON.stringify(newItemForm),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) {
         throw new Error(data.error || "Gagal menambahkan item baru.");
       }
@@ -129,9 +150,9 @@ export default function InventoryItemsPage() {
         unitPrice: "",
         notes: "",
       });
-      fetchItems();
-    } catch (err: any) {
-      setFeedbackMsg({ type: "error", text: err.message });
+      refresh();
+    } catch (err) {
+      setFeedbackMsg({ type: "error", text: err instanceof Error ? err.message : "Gagal menambahkan item baru." });
     } finally {
       setCreating(false);
     }
@@ -152,7 +173,7 @@ export default function InventoryItemsPage() {
         }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string; newStock?: number };
       if (!res.ok) {
         throw new Error(data.error || "Gagal mencatat mutasi stok.");
       }
@@ -168,15 +189,15 @@ export default function InventoryItemsPage() {
         referenceNumber: "",
         notes: "",
       });
-      fetchItems();
-    } catch (err: any) {
-      setFeedbackMsg({ type: "error", text: err.message });
+      refresh();
+    } catch (err) {
+      setFeedbackMsg({ type: "error", text: err instanceof Error ? err.message : "Gagal mencatat mutasi stok." });
     } finally {
       setMoving(false);
     }
   };
 
-  const openMovementDialog = (item: any, type: "STOCK_IN" | "STOCK_OUT" | "ADJUSTMENT") => {
+  const openMovementDialog = (item: InventoryItem, type: "STOCK_IN" | "STOCK_OUT" | "ADJUSTMENT") => {
     setSelectedItemForMove(item);
     setMovementForm({
       type,
@@ -282,7 +303,7 @@ export default function InventoryItemsPage() {
             <CardTitle className="text-base font-bold">Daftar Persediaan Barang</CardTitle>
             <CardDescription>Menampilkan {items.length} item inventaris</CardDescription>
           </div>
-          <Button variant="ghost" size="sm" onClick={fetchItems} className="gap-1.5 text-xs">
+          <Button variant="ghost" size="sm" onClick={refresh} className="gap-1.5 text-xs">
             <RefreshCw className="h-3.5 w-3.5" /> Segarkan
           </Button>
         </CardHeader>

@@ -1,21 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  FileCheck,
   ArrowLeft,
   ShoppingCart,
   CheckCircle2,
   XCircle,
   RotateCcw,
   Clock,
-  UserCheck,
-  Building,
-  DollarSign,
-  AlertCircle,
-  ExternalLink,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,13 +25,75 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+interface VendorOption {
+  id: string;
+  name: string;
+  category?: string;
+}
+
+interface PurchaseRequestItem {
+  id: string;
+  itemName: string;
+  unit: string;
+  quantity: number;
+  estimatedPrice: number;
+  totalPrice: number;
+  itemType?: string;
+  inventoryItemId?: string;
+  notes?: string;
+}
+
+interface PurchaseOrderSummary {
+  id: string;
+  poNumber: string;
+  vendor?: { name?: string };
+  totalAmount: number;
+  status: string;
+}
+
+interface WorkflowStep {
+  id: string;
+  stepOrder: number;
+  name: string;
+}
+
+interface WorkflowAction {
+  id: string;
+  action: string;
+  createdAt: string;
+  actor?: { fullName?: string };
+  comment?: string;
+}
+
+interface WorkflowInstance {
+  currentStep: number;
+  workflow?: { name?: string; steps?: WorkflowStep[] };
+  actions?: WorkflowAction[];
+}
+
+interface PurchaseRequestDetail {
+  id: string;
+  requestNumber: string;
+  title: string;
+  status: string;
+  createdAt: string;
+  requiredDate?: string;
+  purpose?: string;
+  totalEstimatedAmount: number;
+  items: PurchaseRequestItem[];
+  purchaseOrders: PurchaseOrderSummary[];
+  requester?: { fullName?: string };
+  department?: { name?: string };
+  branch?: { name?: string };
+  workflowInstances?: WorkflowInstance[];
+}
+
 export default function PurchaseRequestDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params?.id as string;
 
-  const [request, setRequest] = useState<any>(null);
-  const [vendors, setVendors] = useState<any[]>([]);
+  const [request, setRequest] = useState<PurchaseRequestDetail | null>(null);
+  const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -56,34 +112,48 @@ export default function PurchaseRequestDetailPage() {
     notes: "",
   });
 
-  const fetchDetail = async () => {
-    try {
-      setLoading(true);
-      const [prRes, vndRes] = await Promise.all([
-        fetch(`/api/purchasing/requests/${id}`),
-        fetch("/api/purchasing/vendors"),
-      ]);
-
-      if (!prRes.ok) throw new Error("Gagal mengambil data pengadaan.");
-
-      const prData = await prRes.json();
-      setRequest(prData.request);
-
-      if (vndRes.ok) {
-        const vndData = await vndRes.json();
-        setVendors(vndData.vendors || []);
-      }
-    } catch (err: any) {
-      console.error(err);
-      setFeedbackMsg({ type: "error", text: err.message });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
-    if (id) fetchDetail();
-  }, [id]);
+    if (!id) return;
+    let cancelled = false;
+    async function load() {
+      try {
+        setLoading(true);
+        const [prRes, vndRes] = await Promise.all([
+          fetch(`/api/purchasing/requests/${id}`),
+          fetch("/api/purchasing/vendors"),
+        ]);
+
+        if (!prRes.ok) throw new Error("Gagal mengambil data pengadaan.");
+
+        const prData = (await prRes.json()) as { request: PurchaseRequestDetail };
+        if (cancelled) return;
+        setRequest(prData.request);
+
+        if (vndRes.ok) {
+          const vndData = (await vndRes.json()) as { vendors: VendorOption[] };
+          if (cancelled) return;
+          setVendors(vndData.vendors || []);
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setFeedbackMsg({
+            type: "error",
+            text: err instanceof Error ? err.message : "Gagal mengambil data pengadaan.",
+          });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, refreshKey]);
 
   const handleWorkflowAction = async (action: "APPROVE" | "REJECT" | "RETURN") => {
     setProcessingAction(true);
@@ -95,14 +165,17 @@ export default function PurchaseRequestDetailPage() {
         body: JSON.stringify({ action, comment: actionComment }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string; message?: string };
       if (!res.ok) throw new Error(data.error || "Gagal memproses approval.");
 
       setFeedbackMsg({ type: "success", text: data.message || "Aksi approval berhasil disimpan!" });
       setActionComment("");
-      fetchDetail();
-    } catch (err: any) {
-      setFeedbackMsg({ type: "error", text: err.message });
+      refresh();
+    } catch (err) {
+      setFeedbackMsg({
+        type: "error",
+        text: err instanceof Error ? err.message : "Gagal memproses approval.",
+      });
     } finally {
       setProcessingAction(false);
     }
@@ -110,6 +183,7 @@ export default function PurchaseRequestDetailPage() {
 
   const handleIssuePO = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!request) return;
     if (!poForm.vendorId) {
       setFeedbackMsg({ type: "error", text: "Pilih vendor rekanan penyedia." });
       return;
@@ -118,7 +192,7 @@ export default function PurchaseRequestDetailPage() {
     setIssuingPO(true);
     setFeedbackMsg(null);
     try {
-      const itemsForPO = request.items.map((it: any) => ({
+      const itemsForPO = request.items.map((it: PurchaseRequestItem) => ({
         itemName: it.itemName,
         unit: it.unit,
         quantityOrdered: it.quantity,
@@ -141,7 +215,7 @@ export default function PurchaseRequestDetailPage() {
         }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string; purchaseOrder?: { poNumber?: string } };
       if (!res.ok) throw new Error(data.error || "Gagal menerbitkan Purchase Order.");
 
       setFeedbackMsg({
@@ -149,9 +223,12 @@ export default function PurchaseRequestDetailPage() {
         text: `Purchase Order ${data.purchaseOrder?.poNumber} berhasil diterbitkan!`,
       });
       setPoOpen(false);
-      fetchDetail();
-    } catch (err: any) {
-      setFeedbackMsg({ type: "error", text: err.message });
+      refresh();
+    } catch (err) {
+      setFeedbackMsg({
+        type: "error",
+        text: err instanceof Error ? err.message : "Gagal menerbitkan Purchase Order.",
+      });
     } finally {
       setIssuingPO(false);
     }
@@ -336,7 +413,7 @@ export default function PurchaseRequestDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {request.items?.map((it: any) => (
+                    {request.items?.map((it: PurchaseRequestItem) => (
                       <tr key={it.id} className="hover:bg-muted/40 transition-colors">
                         <td className="py-2.5 px-3 font-medium">
                           {it.itemName}
@@ -380,7 +457,7 @@ export default function PurchaseRequestDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {request.purchaseOrders.map((po: any) => (
+                  {request.purchaseOrders.map((po: PurchaseOrderSummary) => (
                     <Link
                       key={po.id}
                       href={`/purchasing/orders/${po.id}`}
@@ -423,7 +500,7 @@ export default function PurchaseRequestDetailPage() {
               {activeInstance?.workflow?.steps && (
                 <div className="p-3 rounded-lg bg-muted/40 space-y-2 border">
                   <div className="text-xs font-semibold text-muted-foreground uppercase">Tahapan Approval</div>
-                  {activeInstance.workflow.steps.map((st: any) => {
+                  {activeInstance.workflow.steps.map((st: WorkflowStep) => {
                     const isPassed =
                       request.status === "APPROVED" || (activeInstance.currentStep > st.stepOrder && request.status !== "REJECTED");
                     const isCurrent = activeInstance.currentStep === st.stepOrder && request.status === "SUBMITTED";
@@ -498,7 +575,7 @@ export default function PurchaseRequestDetailPage() {
                   Catatan Riwayat Aksi
                 </div>
                 <div className="space-y-3">
-                  {activeInstance?.actions?.map((act: any) => (
+                  {activeInstance?.actions?.map((act: WorkflowAction) => (
                     <div key={act.id} className="p-3 rounded-lg border text-xs space-y-1 bg-card">
                       <div className="flex items-center justify-between">
                         <Badge
@@ -523,7 +600,7 @@ export default function PurchaseRequestDetailPage() {
                         </span>
                       </div>
                       <div className="font-semibold text-foreground">{act.actor?.fullName}</div>
-                      {act.comment && <p className="text-muted-foreground italic">"{act.comment}"</p>}
+                      {act.comment && <p className="text-muted-foreground italic">&quot;{act.comment}&quot;</p>}
                     </div>
                   ))}
                 </div>

@@ -60,7 +60,7 @@ export default async function LeadsPage() {
 
   return (
     <LeadsClientView
-      initialLeads={leads as any}
+      initialLeads={leads}
       officers={officers}
       branches={branches}
     />
