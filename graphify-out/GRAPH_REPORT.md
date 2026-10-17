@@ -1,38 +1,38 @@
-# Graph Report - webapp-bpradiartha  (2026-10-13)
+# Graph Report - webapp-bpradiartha  (2026-10-17)
 
 ## Corpus Check
-- 337 files · ~1,134,660 words
+- 337 files · ~1,234,471 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 5 file(s) not represented in the graph (top: (none) 1, .toml 1, .prisma 1)
 
 ## Summary
-- 2607 nodes · 6328 edges · 199 communities (141 shown, 58 thin omitted)
+- 2609 nodes · 6298 edges · 190 communities (141 shown, 49 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 77 edges (avg confidence: 0.94)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `89bc5155`
+- Built from commit: `5544273f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- CardHeader
-- requireAuthAndPermission
+- Input
+- db.ts
 - AI_CODING_AGENT_INSTRUCTIONS.md
-- documents/route.ts
+- backfill-passwords.ts
 - next
 - PROJECT_SPEC.md
 - CREDIT_WORKFLOW.md
 - 5. Permission Catalog
 - Expo Animation Recipes
-- leads/[id]/route.ts
+- savePrivateDocument
 - notificationService
 - components.json
 - DATABASE_SCHEMA.md
 - package.json
 - compilerOptions
 - DATABASE_ERD.md
-- input.tsx
+- UserFormPage.tsx
 - Prisma Platform core concepts
 - Prisma Platform core concepts
 - Prisma Platform core concepts
@@ -56,7 +56,7 @@
 - app/layout.tsx
 - CSV Data Mapping
 - scripts
-- permissions.ts
+- requireAuthAndPermission
 - 20. Purchasing ERD
 - 21. Workflow ERD
 - 38. Workflow Tables
@@ -82,7 +82,7 @@
 - 35. Purchase Requests
 - 36. Purchase Orders
 - 37. Goods Receipts
-- next.config.ts
+- forbidden/page.tsx
 - document-storage.ts
 - 23. Reporting
 - 2. Core Architectural Principle
@@ -90,19 +90,13 @@
 - cms/layout.tsx
 - master-data/layout.tsx
 - roles/layout.tsx
-- users/layout.tsx
+- ref_fs
 - audit/layout.tsx
 - assets/layout.tsx
-- items/layout.tsx
 - inventory/layout.tsx
-- maintenance/layout.tsx
 - purchasing/layout.tsx
 - orders/layout.tsx
-- receipts/layout.tsx
-- requests/layout.tsx
-- vendors/layout.tsx
 - reports/layout.tsx
-- galeri/layout.tsx
 - laporan/layout.tsx
 - BPR Operational Management System
 - 19. Asset ERD
@@ -137,7 +131,7 @@
 - 9. Permissions
 - postcss.config.mjs
 - 8. CRM Module
-- cms/page.tsx
+- Button
 - Animation Recipes
 - Animation Standards Reference
 - Animation Audit Playbook
@@ -153,29 +147,29 @@
 - The list
 - Design Engineering
 - Component Building Principles
-- CardDescription
+- CustomersClientView.tsx
 - The Animation Decision Framework
 - Performance Rules
 - Gesture and Drag Interactions
-- mfa-service.ts
+- verify-mfa.ts
 - The Sonner Principles (Building Loved Components)
 - Spring Animations
 - Core Philosophy
 - Debugging Animations
 - frontend-design/SKILL.md
 - password-reset.ts
-- Button
+- Badge
 - generateSlikReport.ts
 - AI Coding Agent Instructions — Perbaikan Operasional & Keamanan Aplikasi BPR
 - analyze-slik/route.ts
 - checkRateLimit
-- auth-login.ts
+- password.ts
 - verify-slik-report.ts
-- hashPassword
+- verify-auth.ts
 - slik/types.ts
 - verify-customers-live.ts
-- 2. Perubahan
-- verify-access-live.ts
+- Laporan Sesi Coding Agent — Tahap 4 (P0.4 Penyimpanan dokumen privat & endpoint akses)
+- hashPassword
 - migrate-private-documents.ts
 - verify-mfa-live.ts
 - Implementasi Analisa SLIK OJK (IDEB)
@@ -197,34 +191,31 @@
 - Laporan Sesi Coding Agent — Tahap 1A (P0.1 Autentikasi, hashing, sesi, akun)
 - Laporan Sesi Coding Agent — Tahap 3B (P0.3 cakupan data untuk CRM, laporan/ekspor, dan pengadaan)
 - CreditApplicationsClientView.tsx
-- customer.ts
+- applications/route.ts
 - clip-path for Animation
 - Laporan Sesi Coding Agent — Tahap 1B-1 (P0.1 MFA/TOTP wajib untuk peran ADMIN)
 - customers/route.ts
-- Laporan Sesi Coding Agent — Tahap 3A (P0.3 otorisasi cakupan data & Maker-Checker pada modul kredit)
 - verify-slik-logic.ts
 - The Build Sequence
-- Laporan Sesi Coding Agent — Tahap 1B-2 (P0.1 reset kata sandi mandiri lewat email)
 - Laporan Sesi Coding Agent — Tahap 2B (P0.2 riwayat identitas, deduplikasi, hubungan antar-pihak, persetujuan data pribadi)
-- EditUserClient.tsx
+- edit/page.tsx
 - log
 - items/[id]/route.ts
 - pdf-parse-fork.d.ts
 - status/route.ts
-- forbidden/page.tsx
-- savePrivateDocument
-- verifySecondFactor
+- seed.ts
+- mfa-service.ts
 
 ## God Nodes (most connected - your core abstractions)
 1. `next` - 170 edges
 2. `requireAuthAndPermission()` - 151 edges
-3. `Button()` - 104 edges
+3. `Button()` - 98 edges
 4. `db` - 98 edges
-5. `Card()` - 93 edges
+5. `Card()` - 91 edges
 6. `toScopeUser()` - 91 edges
-7. `CardTitle()` - 87 edges
-8. `CardHeader()` - 86 edges
-9. `CardContent()` - 86 edges
+7. `CardTitle()` - 85 edges
+8. `CardHeader()` - 84 edges
+9. `CardContent()` - 84 edges
 10. `buildScopeFilter()` - 84 edges
 
 ## Surprising Connections (you probably didn't know these)
@@ -242,27 +233,27 @@
 ## Import Cycles
 - None detected.
 
-## Communities (199 total, 58 thin omitted)
+## Communities (190 total, 49 thin omitted)
 
-### Community 0 - "CardHeader"
-Cohesion: 0.23
-Nodes (34): CmsManagementPage(), CATEGORIES, MasterDataPage(), MasterItem, ACTIONS, AuditTrailPage(), ENTITIES, CreditApplicationDetailClientView() (+26 more)
+### Community 0 - "Input"
+Cohesion: 0.22
+Nodes (33): CmsManagementPage(), CATEGORIES, MasterDataPage(), MasterItem, ACTIONS, AuditTrailPage(), ENTITIES, CreditApplicationDetailClientView() (+25 more)
 
-### Community 1 - "requireAuthAndPermission"
+### Community 1 - "db.ts"
 Cohesion: 0.08
-Nodes (51): next-auth, DELETE(), PUT(), POST(), DELETE(), PUT(), GET(), POST() (+43 more)
+Nodes (47): next-auth, DELETE(), PUT(), POST(), DELETE(), PUT(), POST(), authOptions (+39 more)
 
 ### Community 2 - "AI_CODING_AGENT_INSTRUCTIONS.md"
 Cohesion: 0.04
 Nodes (53): 10. Prisma Rules, 11. Database History, 12. Delete Policy, 13. Authentication, 14. Authorization, 15. RBAC and Scope, 16. Segregation of Duties, 17. Validation (+45 more)
 
-### Community 3 - "documents/route.ts"
-Cohesion: 0.16
-Nodes (17): DELETE(), GET(), GET(), POST(), DocumentsPage(), dynamic, metadata, canAttachDocumentTo() (+9 more)
+### Community 3 - "backfill-passwords.ts"
+Cohesion: 0.19
+Nodes (10): APPLY, main(), Plan, prisma, truncateToBytes(), byteLength(), KNOWN_STATIC_DEFAULTS, MAX_PASSWORD_BYTES (+2 more)
 
 ### Community 4 - "next"
 Cohesion: 0.06
-Nodes (22): next, assetScope(), GET(), PUT(), CREDIT_ASSIGNMENT_FIELDS, dynamic, metadata, dynamic (+14 more)
+Nodes (14): next, dynamic, metadata, SlikAnalyzerPage(), dynamic, LeadsPage(), metadata, dynamic (+6 more)
 
 ### Community 5 - "PROJECT_SPEC.md"
 Cohesion: 0.05
@@ -280,9 +271,9 @@ Nodes (29): 10. Future Extension, 1. Purpose, 2. Authorization Model, 3. Initial
 Cohesion: 0.06
 Nodes (33): Bottom sheet you can drag to dismiss, Collapsing header on scroll, Expo Animation Recipes, Firing something once at a threshold, Keyboard-synced UI, List entrances, Press feedback, Screen transitions (Expo Router) (+25 more)
 
-### Community 9 - "leads/[id]/route.ts"
-Cohesion: 0.43
-Nodes (6): DELETE(), GET(), LEAD_ASSIGNMENT_FIELDS, leadScope(), PUT(), RouteParams
+### Community 9 - "savePrivateDocument"
+Cohesion: 0.46
+Nodes (8): 1. Lokasi penyimpanan, 2. Perubahan, storageTests(), deletePrivateDocument(), readDocumentBytes(), readPrivateDocument(), resolvePrivateDocumentPath(), savePrivateDocument()
 
 ### Community 10 - "notificationService"
 Cohesion: 0.17
@@ -298,7 +289,7 @@ Nodes (18): 20. Surveys, 26. Field Activities, 2. PostgreSQL Conventions, 30. As
 
 ### Community 13 - "package.json"
 Cohesion: 0.08
-Nodes (24): eslintConfig, name, prisma, seed, private, version, babel-plugin-react-compiler, eslint (+16 more)
+Nodes (23): eslintConfig, name, prisma, seed, private, version, babel-plugin-react-compiler, eslint (+15 more)
 
 ### Community 14 - "compilerOptions"
 Cohesion: 0.11
@@ -308,9 +299,9 @@ Nodes (18): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModu
 Cohesion: 0.11
 Nodes (16): 10. Application Assignment, 11. Credit Analysis, 12. Survey, 13. Credit Review, 14. Credit Decision, 15. Loan Realization, 22. CMS ERD, 24. Key Relationship Summary (+8 more)
 
-### Community 16 - "input.tsx"
-Cohesion: 0.11
-Nodes (20): @base-ui/react, cn, AccountSecurityClient(), AccountPasswordPage(), metadata, metadata, NewUserPage(), EditingUser (+12 more)
+### Community 16 - "UserFormPage.tsx"
+Cohesion: 0.12
+Nodes (18): @base-ui/react, cn, EditableUser, metadata, NewUserPage(), EditingUser, EMPTY_FORM, Option (+10 more)
 
 ### Community 17 - "Prisma Platform core concepts"
 Cohesion: 0.12
@@ -329,8 +320,8 @@ Cohesion: 0.12
 Nodes (15): Branches are preview environments, Environment variables, Failure modes quick reference, Local development, Object storage, Prisma Platform core concepts, Prisma Postgres, Project setup (+7 more)
 
 ### Community 21 - "hero-slides/upload/route.ts"
-Cohesion: 0.16
-Nodes (11): ALLOWED_TYPES, POST(), GET(), getContentType(), PUBLIC_UPLOAD_DIRS, HERO_ASPECT_RATIO, HERO_CANVAS_HEIGHT, HERO_CANVAS_WIDTH (+3 more)
+Cohesion: 0.25
+Nodes (8): ALLOWED_TYPES, POST(), HERO_ASPECT_RATIO, HERO_CANVAS_HEIGHT, HERO_CANVAS_WIDTH, HERO_MAX_SUBJECT_WIDTH, HERO_SUBJECT_HEIGHT, normalizeHeroImage()
 
 ### Community 22 - "Credit Data Database Design"
 Cohesion: 0.13
@@ -338,7 +329,7 @@ Nodes (14): Active snapshot recommendation, Constraints, Core entities, Credit D
 
 ### Community 23 - "toScopeUser"
 Cohesion: 0.06
-Nodes (64): @prisma/client, POST(), POST(), POST(), assetScope(), GET(), POST(), DELETE() (+56 more)
+Nodes (61): @prisma/client, POST(), POST(), POST(), assetScope(), GET(), POST(), DELETE() (+53 more)
 
 ### Community 24 - "Prisma Composer core concepts"
 Cohesion: 0.15
@@ -404,9 +395,9 @@ Nodes (5): CSV Data Mapping, Keys, Mapping, Type rules, Validation
 Cohesion: 0.08
 Nodes (26): scripts, backfill:passwords, build, dev, lint, migrate:documents, postinstall, set-password (+18 more)
 
-### Community 40 - "permissions.ts"
-Cohesion: 0.10
-Nodes (25): 2. Perubahan, GET(), GET(), POST(), SEED_PERMISSIONS, DELETE(), FIELD_ASSIGNMENT_FIELDS, GET() (+17 more)
+### Community 40 - "requireAuthAndPermission"
+Cohesion: 0.07
+Nodes (40): 2. Perubahan, GET(), GET(), POST(), SEED_PERMISSIONS, GET(), assetScope(), GET() (+32 more)
 
 ### Community 41 - "20. Purchasing ERD"
 Cohesion: 0.40
@@ -461,12 +452,12 @@ Cohesion: 0.50
 Nodes (3): Deploy on Vercel, Getting Started, Learn More
 
 ### Community 54 - "isBranchAllowed"
-Cohesion: 0.16
-Nodes (21): 2. Perubahan, 4. Pengujian, 4. Pengujian, check(), integrationTests(), logicTests(), main(), prisma (+13 more)
+Cohesion: 0.07
+Nodes (40): 1. Temuan yang diverifikasi sebelum perubahan, 2. Perubahan, 3. Migrasi, 4. Pengujian, 5. Inventaris route & status (audit 3A), 6. Risiko atau keputusan yang masih diperlukan, 7. Tahap selesai, 8. Tahap berikutnya (rekomendasi saja; jangan dikerjakan pada sesi ini) (+32 more)
 
 ### Community 55 - "Card"
-Cohesion: 0.13
-Nodes (28): AdminDashboardPage(), metadata, CreditDashboardPage(), dynamic, metadata, CrmDashboardPage(), DashboardPage(), metadata (+20 more)
+Cohesion: 0.14
+Nodes (37): AccountSecurityClient(), AdminDashboardPage(), metadata, CreditDashboardPage(), dynamic, metadata, CustomerDetailClientView(), CrmDashboardPage() (+29 more)
 
 ### Community 57 - "3. Critical Rule: Do Not Invent Business Rules"
 Cohesion: 0.67
@@ -504,9 +495,13 @@ Nodes (3): 36. Purchase Orders, purchase_order_items, purchase_orders
 Cohesion: 0.67
 Nodes (3): 37. Goods Receipts, goods_receipt_items, goods_receipts
 
+### Community 66 - "forbidden/page.tsx"
+Cohesion: 0.05
+Nodes (10): nextConfig, securityHeaders, metadata, metadata, metadata, metadata, metadata, metadata (+2 more)
+
 ### Community 67 - "document-storage.ts"
-Cohesion: 0.16
-Nodes (12): RFC-5987, AllowedDocumentExtension, documentDownloadUrl(), DocumentRef, DocumentValidationError, extensionMatchesSignature(), extensionOfFileName(), INLINE_SAFE_EXTENSIONS (+4 more)
+Cohesion: 0.13
+Nodes (19): RFC-5987, GET(), GET(), DocumentsPage(), evaluateDocumentAccess(), AllowedDocumentExtension, asciiAt(), documentDownloadUrl() (+11 more)
 
 ### Community 68 - "23. Reporting"
 Cohesion: 0.67
@@ -516,9 +511,13 @@ Nodes (3): 23. Reporting, Management Reporting, Operational Dashboard
 Cohesion: 0.67
 Nodes (3): 2. Core Architectural Principle, BPR Operational Management System, Existing Core Banking System
 
-### Community 121 - "cms/page.tsx"
-Cohesion: 0.20
-Nodes (9): Banner, CmsReport, Faq, GalleryItem, HeroSlide, Post, Product, WysiwygEditor() (+1 more)
+### Community 74 - "ref_fs"
+Cohesion: 0.40
+Nodes (3): GET(), getContentType(), PUBLIC_UPLOAD_DIRS
+
+### Community 121 - "Button"
+Cohesion: 0.15
+Nodes (15): Banner, CmsReport, Faq, GalleryItem, HeroSlide, Post, Product, LogoutButton() (+7 more)
 
 ### Community 122 - "Animation Recipes"
 Cohesion: 0.14
@@ -580,9 +579,9 @@ Nodes (13): 3D transforms for depth, Accessibility, CSS Transform Mastery, Desig
 Cohesion: 0.25
 Nodes (8): Animate enter states with @starting-style, Buttons must feel responsive, Component Building Principles, Make popovers origin-aware, Never animate from scale(0), Tooltips: skip delay on subsequent hovers, Use blur to mask imperfect transitions, Use CSS transitions over keyframes for interruptible UI
 
-### Community 138 - "CardDescription"
-Cohesion: 0.13
-Nodes (42): BranchesPage(), metadata, DepartmentsPage(), metadata, RolesPage(), UsersPage(), CreditApplicationsClientView(), BranchOption (+34 more)
+### Community 138 - "CustomersClientView.tsx"
+Cohesion: 0.12
+Nodes (41): BranchesPage(), metadata, DepartmentsPage(), metadata, RolesPage(), UsersPage(), CreditApplicationsClientView(), BranchOption (+33 more)
 
 ### Community 139 - "The Animation Decision Framework"
 Cohesion: 0.33
@@ -596,9 +595,9 @@ Nodes (6): CSS animations beat JS under load, CSS variables are inheritable, Fra
 Cohesion: 0.33
 Nodes (6): Damping at boundaries, Friction instead of hard stops, Gesture and Drag Interactions, Momentum-based dismissal, Multi-touch protection, Pointer capture for drag
 
-### Community 142 - "mfa-service.ts"
-Cohesion: 0.11
-Nodes (43): otplib, base32Decode(), buatAkunUji(), check(), hapusAkunUji(), main(), totpRfc6238(), RFC-6238 (+35 more)
+### Community 142 - "verify-mfa.ts"
+Cohesion: 0.12
+Nodes (31): otplib, base32Decode(), buatAkunUji(), check(), hapusAkunUji(), main(), totpRfc6238(), RFC-6238 (+23 more)
 
 ### Community 143 - "The Sonner Principles (Building Loved Components)"
 Cohesion: 0.40
@@ -620,9 +619,9 @@ Nodes (4): Debugging Animations, Frame-by-frame inspection, Slow motion testing,
 Cohesion: 0.09
 Nodes (37): check(), hapusAkunUji(), main(), restore(), setEnv(), MailMessage, MailResult, mailTransportName (+29 more)
 
-### Community 149 - "Button"
+### Community 149 - "Badge"
 Cohesion: 0.12
-Nodes (34): lucide-react, react, BeritaPage(), Post, BeritaDetailPage(), Props, MaintenanceListClient(), MaintenanceSchedulePage() (+26 more)
+Nodes (27): lucide-react, react, BeritaPage(), Post, BeritaDetailPage(), Props, GaleriPage(), GalleryItem (+19 more)
 
 ### Community 150 - "generateSlikReport.ts"
 Cohesion: 0.09
@@ -637,20 +636,20 @@ Cohesion: 0.11
 Nodes (31): check(), main(), ujiPerBerkas(), dynamic, FileExtractionStatus, GET(), isPdf(), MAX_CHARS_PER_DOC (+23 more)
 
 ### Community 153 - "checkRateLimit"
-Cohesion: 0.17
-Nodes (20): POST(), POST(), JAWABAN_SERAGAM, POST(), samakanWaktu(), GET(), POST(), samarkanEmail() (+12 more)
+Cohesion: 0.15
+Nodes (22): qrcode, AccountPasswordPage(), metadata, POST(), POST(), JAWABAN_SERAGAM, POST(), samakanWaktu() (+14 more)
 
-### Community 154 - "auth-login.ts"
-Cohesion: 0.09
-Nodes (30): check(), main(), POST(), ACCOUNT_LOCK_MS, Bucket, checkLoginIpRate(), clearLoginIpRate(), ipBuckets (+22 more)
+### Community 154 - "password.ts"
+Cohesion: 0.12
+Nodes (23): 2. Perubahan, check(), main(), registerFailedLogin(), AUTH_AUDIT_NOTES, LoginOutcome, LoginUser, toNextAuthUser() (+15 more)
 
 ### Community 155 - "verify-slik-report.ts"
 Cohesion: 0.13
 Nodes (23): jspdf, jspdf-autotable, buildSample(), buildStress(), footerTexts, jspdfModule, main(), PdfConstructor (+15 more)
 
-### Community 156 - "hashPassword"
+### Community 156 - "verify-auth.ts"
 Cohesion: 0.11
-Nodes (32): APPLY, main(), Plan, prisma, truncateToBytes(), main(), prisma, check() (+24 more)
+Nodes (25): check(), databaseTests(), logicTests(), main(), prisma, parsedRevalidate, SEED_ADMIN_PASSWORD_ENV, SESSION_MAX_AGE_SECONDS (+17 more)
 
 ### Community 157 - "slik/types.ts"
 Cohesion: 0.15
@@ -660,17 +659,17 @@ Nodes (19): Penyimpangan dari spesifikasi, asArray(), asString(), asStringArray(
 Cohesion: 0.14
 Nodes (16): ApiJson, BASE, check(), CreateCustomerResp, CustomerLite, DetailCustomerResp, DuplicateResp, Jar (+8 more)
 
-### Community 159 - "2. Perubahan"
-Cohesion: 0.15
-Nodes (14): 1. Lokasi penyimpanan, 1. Temuan yang diverifikasi sebelum perubahan, 2. Perubahan, 3. Migrasi dan risiko data, 4. Pengujian, 5. Risiko atau keputusan yang masih diperlukan, 6. Tahap selesai, 7. Tahap berikutnya (rekomendasi saja; jangan dikerjakan pada sesi ini) (+6 more)
-
-### Community 160 - "verify-access-live.ts"
+### Community 159 - "Laporan Sesi Coding Agent — Tahap 4 (P0.4 Penyimpanan dokumen privat & endpoint akses)"
 Cohesion: 0.22
-Nodes (9): BASE, check(), CreateResp, Jar, ListResp, login(), main(), makeUser() (+1 more)
+Nodes (8): 1. Temuan yang diverifikasi sebelum perubahan, 3. Migrasi dan risiko data, 4. Pengujian, 5. Risiko atau keputusan yang masih diperlukan, 6. Tahap selesai, 7. Tahap berikutnya (rekomendasi saja; jangan dikerjakan pada sesi ini), Laporan Sesi Coding Agent — Tahap 4 (P0.4 Penyimpanan dokumen privat & endpoint akses), Status untuk sesi berikutnya
+
+### Community 160 - "hashPassword"
+Cohesion: 0.17
+Nodes (14): main(), prisma, BASE, check(), CreateResp, Jar, ListResp, login() (+6 more)
 
 ### Community 161 - "migrate-private-documents.ts"
-Cohesion: 0.24
-Nodes (14): APPLY, main(), migrateRow(), pickExt(), prisma, Row, storeAndVerify(), sweepOrphanPublicFiles() (+6 more)
+Cohesion: 0.25
+Nodes (13): APPLY, main(), migrateRow(), pickExt(), prisma, Row, storeAndVerify(), sweepOrphanPublicFiles() (+5 more)
 
 ### Community 162 - "verify-mfa-live.ts"
 Cohesion: 0.23
@@ -681,12 +680,12 @@ Cohesion: 0.12
 Nodes (14): 1. Requirement Arsitektur & Teknologi, Alur sistem, Batasan yang diketahui, Implementasi Analisa SLIK OJK (IDEB), Ketahanan pembacaan PDF (penting), Konfigurasi, Menjalankan uji mandiri, Perilaku multi-berkas (penting) (+6 more)
 
 ### Community 164 - "verify-documents-live.ts"
-Cohesion: 0.21
-Nodes (10): BASE, check(), Jar, login(), main(), makeUser(), PNG_BYTES, pngBlob() (+2 more)
+Cohesion: 0.23
+Nodes (9): BASE, check(), Jar, login(), main(), PNG_BYTES, pngBlob(), prisma (+1 more)
 
 ### Community 165 - "verify-documents.ts"
 Cohesion: 0.21
-Nodes (17): check(), databaseTests(), DOCX, EXE, JPEG, logicTests(), main(), PDF (+9 more)
+Nodes (15): check(), databaseTests(), DOCX, EXE, JPEG, logicTests(), main(), PDF (+7 more)
 
 ### Community 166 - "SlikAnalyzerClientView.tsx"
 Cohesion: 0.17
@@ -697,12 +696,12 @@ Cohesion: 0.25
 Nodes (10): ambilToken(), bacaSurat(), BASE, check(), Jar, login(), main(), prisma (+2 more)
 
 ### Community 169 - "Laporan Sesi Coding Agent — Tahap 2A (P0.2 memisahkan master nasabah/debitur dari pegawai)"
-Cohesion: 0.19
-Nodes (12): 2. Perubahan, 1. Temuan yang diverifikasi sebelum perubahan, 2. Perubahan, 3. Migrasi dan risiko data, 4. Pengujian, 5. Risiko atau keputusan yang masih diperlukan, 6. Tahap selesai, 7. Tahap berikutnya (rekomendasi saja; jangan dikerjakan pada sesi ini) (+4 more)
+Cohesion: 0.12
+Nodes (18): 1. Temuan yang diverifikasi sebelum perubahan, 2. Perubahan, 3. Migrasi, 4. Pengujian, 5. Risiko / keputusan yang masih menunggu, 6. Langkah berikutnya (rekomendasi saja), Laporan Sesi Coding Agent — Tahap 1B-2 (P0.1 reset kata sandi mandiri lewat email), Status untuk sesi berikutnya (+10 more)
 
 ### Community 170 - "verify-auth-live.ts"
-Cohesion: 0.21
-Nodes (8): BASE, check(), Jar, login(), LoginResult, prisma, sessionEmail(), MAX_FAILED_ATTEMPTS
+Cohesion: 0.24
+Nodes (8): BASE, check(), Jar, login(), LoginResult, main(), prisma, sessionEmail()
 
 ### Community 171 - "Penyimpanan & Akses Dokumen (Tahap 4 — P0.4)"
 Cohesion: 0.18
@@ -717,8 +716,8 @@ Cohesion: 0.29
 Nodes (9): bcryptjs, apiBerizin(), BASE, check(), Jar, login(), main(), prisma (+1 more)
 
 ### Community 174 - "verify-customers.ts"
-Cohesion: 0.44
-Nodes (9): check(), integrationTests(), integrityTests(), logicTests(), main(), prisma, schemaTests(), sourceGuardTests() (+1 more)
+Cohesion: 0.33
+Nodes (12): check(), integrationTests(), integrityTests(), logicTests(), main(), prisma, schemaTests(), sourceGuardTests() (+4 more)
 
 ### Community 175 - "Laporan Sesi Coding Agent — Tahap 0 (Audit Repository)"
 Cohesion: 0.18
@@ -730,15 +729,15 @@ Nodes (10): 1. Temuan yang diverifikasi sebelum perubahan, 2. Perubahan, 3. Migr
 
 ### Community 177 - "CustomerDetailClientView.tsx"
 Cohesion: 0.18
-Nodes (11): AppRow, CONSENT_LABELS, CONSENT_TYPES, ConsentRow, CustomerDetail, CustomerDetailClientView(), Field(), HistoryRow (+3 more)
+Nodes (10): AppRow, CONSENT_LABELS, CONSENT_TYPES, ConsentRow, CustomerDetail, Field(), HistoryRow, RELATIONSHIP_LABELS (+2 more)
 
 ### Community 178 - "Building Animations"
 Cohesion: 0.20
 Nodes (8): Building Animations, Hard Rules, Initial Response, Never Ship, Operating Posture, Output, Recipes, Tone
 
 ### Community 179 - "Laporan Sesi Coding Agent — Tahap 1A (P0.1 Autentikasi, hashing, sesi, akun)"
-Cohesion: 0.20
-Nodes (9): 1. Temuan yang diverifikasi, 2. Perubahan, 3. Migrasi, 4. Pengujian, 5. Risiko atau keputusan yang masih diperlukan, 6. Langkah berikutnya (rekomendasi saja), Koreksi pasca-uji (1A.1) — 2026-10-12, Laporan Sesi Coding Agent — Tahap 1A (P0.1 Autentikasi, hashing, sesi, akun) (+1 more)
+Cohesion: 0.22
+Nodes (8): 1. Temuan yang diverifikasi, 3. Migrasi, 4. Pengujian, 5. Risiko atau keputusan yang masih diperlukan, 6. Langkah berikutnya (rekomendasi saja), Koreksi pasca-uji (1A.1) — 2026-10-12, Laporan Sesi Coding Agent — Tahap 1A (P0.1 Autentikasi, hashing, sesi, akun), Status untuk sesi berikutnya
 
 ### Community 180 - "Laporan Sesi Coding Agent — Tahap 3B (P0.3 cakupan data untuk CRM, laporan/ekspor, dan pengadaan)"
 Cohesion: 0.20
@@ -748,9 +747,9 @@ Nodes (9): 1. Temuan yang diverifikasi sebelum perubahan, 2. Perubahan, 3. Migra
 Cohesion: 0.20
 Nodes (9): APPLICATION_SOURCES, BranchOption, CREDIT_PRODUCTS, CustomerOption, DocumentOption, LeadOption, Props, STATUS_CONFIG (+1 more)
 
-### Community 182 - "customer.ts"
-Cohesion: 0.24
-Nodes (10): buildCustomerNumber(), createCustomerWithNumber(), CUSTOMER_IDENTITY_FIELDS, CUSTOMER_STATUSES, CUSTOMER_TYPES, CustomerIdentityField, CustomerStatusValue, diffIdentitySnapshots() (+2 more)
+### Community 182 - "applications/route.ts"
+Cohesion: 0.19
+Nodes (15): CREDIT_ASSIGNMENT_FIELDS, CUSTOMER_SELECT, ensureAssignable(), POST(), CUSTOMER_IDENTITY_FIELDS, CUSTOMER_STATUSES, CUSTOMER_TYPES, CustomerIdentityField (+7 more)
 
 ### Community 183 - "clip-path for Animation"
 Cohesion: 0.22
@@ -762,11 +761,7 @@ Nodes (8): 1. Temuan yang diverifikasi sebelum perubahan, 2. Perubahan, 3. Migra
 
 ### Community 185 - "customers/route.ts"
 Cohesion: 0.34
-Nodes (14): 2. Perubahan, stage2BTests(), PUT(), CUSTOMER_ASSIGNMENT_FIELDS, customerScope(), GET(), POST(), toListItem() (+6 more)
-
-### Community 186 - "Laporan Sesi Coding Agent — Tahap 3A (P0.3 otorisasi cakupan data & Maker-Checker pada modul kredit)"
-Cohesion: 0.22
-Nodes (8): 1. Temuan yang diverifikasi sebelum perubahan, 3. Migrasi, 5. Inventaris route & status (audit 3A), 6. Risiko atau keputusan yang masih diperlukan, 7. Tahap selesai, 8. Tahap berikutnya (rekomendasi saja; jangan dikerjakan pada sesi ini), Laporan Sesi Coding Agent — Tahap 3A (P0.3 otorisasi cakupan data & Maker-Checker pada modul kredit), Status untuk sesi berikutnya
+Nodes (13): 2. Perubahan, stage2BTests(), PUT(), CUSTOMER_ASSIGNMENT_FIELDS, customerScope(), GET(), POST(), toListItem() (+5 more)
 
 ### Community 187 - "verify-slik-logic.ts"
 Cohesion: 0.22
@@ -776,17 +771,13 @@ Nodes (6): { data, issues }, dipotong, habis, messy, prompt, semuaMuat
 Cohesion: 0.25
 Nodes (8): 1. Should this animate at all?, 2. What is the purpose?, 3. Pick the tool — cheapest that works, 4. Pick the properties, 5. Easing and duration — or a spring, 6. Interruption and exit, 7. Reduced motion and pointer gating, The Build Sequence
 
-### Community 189 - "Laporan Sesi Coding Agent — Tahap 1B-2 (P0.1 reset kata sandi mandiri lewat email)"
-Cohesion: 0.25
-Nodes (7): 1. Temuan yang diverifikasi sebelum perubahan, 3. Migrasi, 4. Pengujian, 5. Risiko / keputusan yang masih menunggu, 6. Langkah berikutnya (rekomendasi saja), Laporan Sesi Coding Agent — Tahap 1B-2 (P0.1 reset kata sandi mandiri lewat email), Status untuk sesi berikutnya
-
 ### Community 190 - "Laporan Sesi Coding Agent — Tahap 2B (P0.2 riwayat identitas, deduplikasi, hubungan antar-pihak, persetujuan data pribadi)"
-Cohesion: 0.14
-Nodes (10): 1. Temuan yang diverifikasi sebelum perubahan, 3. Migrasi, 4. Pengujian, 5. Risiko atau keputusan yang masih diperlukan, 6. Tahap selesai, 7. Tahap berikutnya (rekomendasi saja; jangan dikerjakan pada sesi ini), Laporan Sesi Coding Agent — Tahap 2B (P0.2 riwayat identitas, deduplikasi, hubungan antar-pihak, persetujuan data pribadi), Status untuk sesi berikutnya (+2 more)
+Cohesion: 0.20
+Nodes (9): 1. Temuan yang diverifikasi sebelum perubahan, 3. Migrasi, 4. Pengujian, 5. Risiko atau keputusan yang masih diperlukan, 6. Tahap selesai, 7. Tahap berikutnya (rekomendasi saja; jangan dikerjakan pada sesi ini), Laporan Sesi Coding Agent — Tahap 2B (P0.2 riwayat identitas, deduplikasi, hubungan antar-pihak, persetujuan data pribadi), Status untuk sesi berikutnya (+1 more)
 
-### Community 191 - "EditUserClient.tsx"
-Cohesion: 0.47
-Nodes (4): EditUserPage(), metadata, EditableUser, EditUserClient()
+### Community 191 - "edit/page.tsx"
+Cohesion: 0.67
+Nodes (3): EditUserPage(), metadata, EditUserClient()
 
 ### Community 192 - "log"
 Cohesion: 0.25
@@ -800,33 +791,33 @@ Nodes (3): GET(), invScope(), PUT()
 Cohesion: 0.50
 Nodes (3): pdf-parse-fork, PdfParseOptions, PdfParseResult
 
-### Community 197 - "savePrivateDocument"
-Cohesion: 0.39
-Nodes (7): buildMinimalPdf(), main(), prisma, SAMPLE_PHOTO_PNG, privateDocumentExists(), privateKeyOf(), savePrivateDocument()
+### Community 197 - "seed.ts"
+Cohesion: 0.43
+Nodes (6): buildMinimalPdf(), main(), prisma, SAMPLE_PHOTO_PNG, privateDocumentExists(), privateKeyOf()
 
-### Community 198 - "verifySecondFactor"
-Cohesion: 0.83
-Nodes (3): POST(), disableMfa(), verifySecondFactor()
+### Community 198 - "mfa-service.ts"
+Cohesion: 0.17
+Nodes (17): POST(), backupCodeMatches(), generateBackupCodes(), hashBackupCode(), MFA_CHALLENGE_MAX_ATTEMPTS, normalizeBackupCode(), ChallengeState, confirmMfaEnrollment() (+9 more)
 
 ## Knowledge Gaps
-- **1328 isolated node(s):** `$schema`, `style`, `rsc`, `tsx`, `config` (+1323 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1475 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **58 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **1330 isolated node(s):** `$schema`, `style`, `rsc`, `tsx`, `config` (+1325 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1477 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **49 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `next` connect `next` to `CardHeader`, `requireAuthAndPermission`, `documents/route.ts`, `leads/[id]/route.ts`, `CardDescription`, `package.json`, `input.tsx`, `hero-slides/upload/route.ts`, `Button`, `toScopeUser`, `analyze-slik/route.ts`, `checkRateLimit`, `auth-login.ts`, `(dashboard)/layout.tsx`, `app/layout.tsx`, `SlikAnalyzerClientView.tsx`, `permissions.ts`, `CustomerDetailClientView.tsx`, `CreditApplicationsClientView.tsx`, `isBranchAllowed`, `Card`, `customers/route.ts`, `EditUserClient.tsx`, `items/[id]/route.ts`, `next.config.ts`, `status/route.ts`, `forbidden/page.tsx`, `verifySecondFactor`, `berita/layout.tsx`, `cms/layout.tsx`, `master-data/layout.tsx`, `roles/layout.tsx`, `users/layout.tsx`, `audit/layout.tsx`, `assets/layout.tsx`, `items/layout.tsx`, `inventory/layout.tsx`, `maintenance/layout.tsx`, `purchasing/layout.tsx`, `orders/layout.tsx`, `receipts/layout.tsx`, `requests/layout.tsx`, `vendors/layout.tsx`, `reports/layout.tsx`, `galeri/layout.tsx`, `laporan/layout.tsx`?**
-  _High betweenness centrality (0.159) - this node is a cross-community bridge._
-- **Why does `@prisma/client` connect `toScopeUser` to `documents/route.ts`, `next`, `leads/[id]/route.ts`, `package.json`, `hashPassword`, `verify-customers-live.ts`, `verify-access-live.ts`, `migrate-private-documents.ts`, `verify-mfa-live.ts`, `(dashboard)/layout.tsx`, `verify-documents-live.ts`, `verify-documents.ts`, `verify-password-reset-live.ts`, `permissions.ts`, `verify-auth-live.ts`, `verify-account-security-live.ts`, `verify-customers.ts`, `isBranchAllowed`, `Card`, `customer.ts`, `customers/route.ts`, `items/[id]/route.ts`, `savePrivateDocument`?**
-  _High betweenness centrality (0.081) - this node is a cross-community bridge._
-- **Why does `react` connect `Button` to `CardHeader`, `primitives/radix/toggle.tsx`, `app/layout.tsx`, `SlikAnalyzerClientView.tsx`, `dropdown-menu.tsx`, `CardDescription`, `package.json`, `input.tsx`, `CustomerDetailClientView.tsx`, `CreditApplicationsClientView.tsx`, `Card`, `cms/page.tsx`, `clip-path for Animation`, `EditUserClient.tsx`?**
-  _High betweenness centrality (0.059) - this node is a cross-community bridge._
+- **Why does `next` connect `next` to `Input`, `db.ts`, `CustomersClientView.tsx`, `package.json`, `verify-mfa.ts`, `UserFormPage.tsx`, `hero-slides/upload/route.ts`, `Badge`, `toScopeUser`, `analyze-slik/route.ts`, `checkRateLimit`, `(dashboard)/layout.tsx`, `app/layout.tsx`, `SlikAnalyzerClientView.tsx`, `requireAuthAndPermission`, `CustomerDetailClientView.tsx`, `CreditApplicationsClientView.tsx`, `isBranchAllowed`, `Card`, `applications/route.ts`, `customers/route.ts`, `edit/page.tsx`, `items/[id]/route.ts`, `forbidden/page.tsx`, `document-storage.ts`, `status/route.ts`, `mfa-service.ts`, `berita/layout.tsx`, `cms/layout.tsx`, `master-data/layout.tsx`, `roles/layout.tsx`, `audit/layout.tsx`, `assets/layout.tsx`, `ref_fs`, `inventory/layout.tsx`, `purchasing/layout.tsx`, `orders/layout.tsx`, `reports/layout.tsx`, `laporan/layout.tsx`, `Button`?**
+  _High betweenness centrality (0.156) - this node is a cross-community bridge._
+- **Why does `@prisma/client` connect `toScopeUser` to `db.ts`, `backfill-passwords.ts`, `package.json`, `verify-auth.ts`, `verify-customers-live.ts`, `hashPassword`, `migrate-private-documents.ts`, `verify-mfa-live.ts`, `(dashboard)/layout.tsx`, `verify-documents-live.ts`, `verify-documents.ts`, `verify-password-reset-live.ts`, `requireAuthAndPermission`, `verify-auth-live.ts`, `verify-account-security-live.ts`, `verify-customers.ts`, `isBranchAllowed`, `applications/route.ts`, `Card`, `customers/route.ts`, `items/[id]/route.ts`, `seed.ts`?**
+  _High betweenness centrality (0.082) - this node is a cross-community bridge._
+- **Why does `react` connect `Badge` to `Input`, `primitives/radix/toggle.tsx`, `app/layout.tsx`, `SlikAnalyzerClientView.tsx`, `dropdown-menu.tsx`, `CustomersClientView.tsx`, `package.json`, `UserFormPage.tsx`, `CustomerDetailClientView.tsx`, `CreditApplicationsClientView.tsx`, `Card`, `Button`, `clip-path for Animation`?**
+  _High betweenness centrality (0.053) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `requireAuthAndPermission()` (e.g. with `2. Perubahan` and `Penyimpangan dari spesifikasi`) actually correct?**
   _`requireAuthAndPermission()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `$schema`, `style`, `rsc` to the rest of the system?**
-  _1328 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `requireAuthAndPermission` be split into smaller, more focused modules?**
-  _Cohesion score 0.07620383356708742 - nodes in this community are weakly interconnected._
+  _1330 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `db.ts` be split into smaller, more focused modules?**
+  _Cohesion score 0.07931832526825162 - nodes in this community are weakly interconnected._
 - **Should `AI_CODING_AGENT_INSTRUCTIONS.md` be split into smaller, more focused modules?**
   _Cohesion score 0.03636363636363636 - nodes in this community are weakly interconnected._

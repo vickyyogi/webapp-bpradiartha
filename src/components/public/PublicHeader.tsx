@@ -16,12 +16,9 @@ import {
   ListTree,
   Camera,
   Info,
-  Calculator,
   Home,
-  ExternalLink,
+  ArrowRight,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/public/ThemeToggle";
 
 interface ReportItem {
@@ -61,30 +58,33 @@ export function PublicHeader() {
   return (
     <>
       {/* Top Notification Bar */}
-      <div className="bg-primary text-primary-foreground text-xs py-2 px-4 border-b border-primary-dark">
+      <div className="bg-lp-band text-lp-band-text text-xs py-2 px-4 border-b border-lp-band-border">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1 text-white/90">
-              <Phone className="h-3 w-3 text-gold-light" /> (0341) 453200
+            <span className="flex items-center gap-1 text-lp-band-muted">
+              <Phone className="h-3 w-3 text-lp-accent" /> (0341) 453200
             </span>
-            <span className="flex items-center gap-1 text-white/90">
-              <Mail className="h-3 w-3 text-gold-light" /> halo@bpradiartha.com
+            <span className="flex items-center gap-1 text-lp-band-muted">
+              <Mail className="h-3 w-3 text-lp-accent" /> halo@bpradiartha.com
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 font-medium text-white">
-              <ShieldCheck className="h-3.5 w-3.5 text-gold-light" /> Terdaftar & Diawasi OJK • Dijamin LPS
+            <span className="flex items-center gap-1.5 font-medium text-lp-band-text">
+              <ShieldCheck className="h-3.5 w-3.5 text-lp-accent" /> Terdaftar & Diawasi OJK • Dijamin LPS
             </span>
-            <span className="text-white/40">|</span>
-            <Link href="/login" className="hover:text-gold-light transition-colors font-semibold flex items-center gap-1 text-white">
-              <Lock className="h-3 w-3 text-gold-light" /> Portal Staf
+            <span className="text-lp-band-muted/50">|</span>
+            <Link
+              href="/login"
+              className="hover:text-lp-accent transition-colors font-semibold flex items-center gap-1 text-lp-band-text"
+            >
+              <Lock className="h-3 w-3 text-lp-accent" /> Portal Staf
             </Link>
           </div>
         </div>
       </div>
 
       {/* Main Header / Navigation */}
-      <header className="sticky top-0 z-40 safe-top bg-background/95 backdrop-blur border-b">
+      <header className="sticky top-0 z-40 safe-top bg-lp-bg/95 backdrop-blur border-b border-lp-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-20">
           <Link href="/" className="flex items-center gap-3">
             <div className="relative h-15 w-56 sm:w-64 flex items-center gap-2">
@@ -97,7 +97,7 @@ export function PublicHeader() {
                   (e.target as HTMLImageElement).src = "/logo.png"; // Fallback ke logo default jika gagal memuat
                 }}
               />
-              <span className="font-semibold text-primary">BPR Adiartha Reksacitra</span>
+              <span className="font-semibold text-lp-text">BPR Adiartha Reksacitra</span>
             </div>
           </Link>
 
@@ -105,7 +105,7 @@ export function PublicHeader() {
           <nav className="hidden lg:flex items-center gap-3 xl:gap-5 text-sm font-medium">
             <Link
               href="/#produk"
-              className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+              className="text-lp-muted hover:text-lp-brand transition-colors flex items-center gap-1"
             >
               <ListTree className="h-3.5 w-3.5" />
               Produk
@@ -121,9 +121,7 @@ export function PublicHeader() {
                 type="button"
                 onClick={() => setReportDropdownOpen(!reportDropdownOpen)}
                 className={`transition-colors flex items-center gap-1 py-2 font-medium cursor-pointer ${
-                  isCurrent("/laporan")
-                    ? "text-primary font-semibold"
-                    : "text-muted-foreground hover:text-primary"
+                  isCurrent("/laporan") ? "text-lp-brand font-semibold" : "text-lp-muted hover:text-lp-brand"
                 }`}
               >
                 <FileText className="h-3.5 w-3.5" />
@@ -137,14 +135,14 @@ export function PublicHeader() {
 
               {/* Dropdown Card */}
               {reportDropdownOpen && (
-                <div className="absolute top-full left-0 w-84 bg-popover text-popover-foreground border rounded-xl shadow-xl p-3 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
-                  <div className="px-2 py-1.5 border-b mb-2 flex items-center justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <FileText className="h-3 w-3 text-rose-500" /> Publikasi Resmi (PDF)
+                <div className="absolute top-full left-0 w-84 bg-lp-card text-lp-text border border-lp-border rounded-xl shadow-xl p-3 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="px-2 py-1.5 border-b border-lp-border mb-2 flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-lp-muted flex items-center gap-1.5">
+                      <FileText className="h-3 w-3 text-lp-brand" /> Publikasi Resmi (PDF)
                     </span>
-                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-emerald-500/40 text-emerald-600">
+                    <span className="lp-eyebrow text-[9px] px-1.5 py-0.5 rounded-full border border-lp-accent/50 bg-lp-accent-soft text-lp-brand">
                       OJK & LPS
-                    </Badge>
+                    </span>
                   </div>
 
                   <div className="space-y-1">
@@ -154,23 +152,19 @@ export function PublicHeader() {
                           key={item.id}
                           href={`/laporan/${item.slug}`}
                           onClick={() => setReportDropdownOpen(false)}
-                          className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-muted transition-colors group cursor-pointer"
+                          className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-lp-card-2 transition-colors group cursor-pointer"
                         >
-                          <div className="h-7 w-7 rounded bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center shrink-0 mt-0.5 border border-rose-100 dark:border-rose-900/40">
+                          <div className="h-7 w-7 rounded bg-lp-brand-soft text-lp-brand flex items-center justify-center shrink-0 mt-0.5 border border-lp-border">
                             <FileText className="h-3.5 w-3.5" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+                              <span className="text-[10px] font-semibold text-lp-brand">
                                 {item.category.replace("_", " ")}
                               </span>
-                              {item.year && (
-                                <span className="text-[10px] text-muted-foreground">
-                                  • {item.year}
-                                </span>
-                              )}
+                              {item.year && <span className="text-[10px] text-lp-muted">• {item.year}</span>}
                             </div>
-                            <h4 className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                            <h4 className="text-xs font-semibold text-lp-text group-hover:text-lp-brand transition-colors truncate">
                               {item.title}
                             </h4>
                           </div>
@@ -181,36 +175,36 @@ export function PublicHeader() {
                         <Link
                           href="/laporan"
                           onClick={() => setReportDropdownOpen(false)}
-                          className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted text-xs font-medium cursor-pointer"
+                          className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-lp-card-2 text-xs font-medium cursor-pointer"
                         >
-                          <FileText className="h-4 w-4 text-blue-500" />
+                          <FileText className="h-4 w-4 text-lp-brand" />
                           Laporan Keuangan Publikasi
                         </Link>
                         <Link
                           href="/laporan"
                           onClick={() => setReportDropdownOpen(false)}
-                          className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted text-xs font-medium cursor-pointer"
+                          className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-lp-card-2 text-xs font-medium cursor-pointer"
                         >
-                          <FileText className="h-4 w-4 text-purple-500" />
+                          <FileText className="h-4 w-4 text-lp-brand" />
                           Laporan Tata Kelola (GCG)
                         </Link>
                         <Link
                           href="/laporan"
                           onClick={() => setReportDropdownOpen(false)}
-                          className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted text-xs font-medium cursor-pointer"
+                          className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-lp-card-2 text-xs font-medium cursor-pointer"
                         >
-                          <FileText className="h-4 w-4 text-amber-500" />
+                          <FileText className="h-4 w-4 text-lp-brand" />
                           Laporan Tahunan (Annual Report)
                         </Link>
                       </>
                     )}
                   </div>
 
-                  <div className="mt-2 pt-2 border-t">
+                  <div className="mt-2 pt-2 border-t border-lp-border">
                     <Link
                       href="/laporan"
                       onClick={() => setReportDropdownOpen(false)}
-                      className="flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-semibold text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                      className="flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-semibold text-lp-brand hover:bg-lp-brand-soft transition-colors cursor-pointer"
                     >
                       <span>Lihat Seluruh Laporan Publikasi</span>
                       <ChevronRight className="h-3.5 w-3.5" />
@@ -223,7 +217,7 @@ export function PublicHeader() {
             <Link
               href="/berita"
               className={`transition-colors flex items-center gap-1 ${
-                isCurrent("/berita") ? "text-primary " : "text-muted-foreground hover:text-primary"
+                isCurrent("/berita") ? "text-lp-brand" : "text-lp-muted hover:text-lp-brand"
               }`}
             >
               <FileText className="h-3.5 w-3.5" />
@@ -232,7 +226,7 @@ export function PublicHeader() {
             <Link
               href="/galeri"
               className={`transition-colors flex items-center gap-1 ${
-                isCurrent("/galeri") ? "text-primary " : "text-muted-foreground hover:text-primary"
+                isCurrent("/galeri") ? "text-lp-brand" : "text-lp-muted hover:text-lp-brand"
               }`}
             >
               <Camera className="h-3.5 w-3.5" />
@@ -240,14 +234,14 @@ export function PublicHeader() {
             </Link>
             <Link
               href="/#faq"
-              className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+              className="text-lp-muted hover:text-lp-brand transition-colors flex items-center gap-1"
             >
               <Info className="h-3.5 w-3.5" />
               Bantuan (FAQ)
             </Link>
             <Link
               href="/#kontak"
-              className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+              className="text-lp-muted hover:text-lp-brand transition-colors flex items-center gap-1"
             >
               <Phone className="h-3.5 w-3.5" />
               Kontak
@@ -257,51 +251,55 @@ export function PublicHeader() {
           {/* Action Button & Mobile Menu Toggle */}
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Link href="/#form-pengajuan">
-              <Button className="gap-2 font-semibold shadow-xs text-xs sm:text-sm bg-primary text-primary-foreground hover:bg-primary-dark cursor-pointer">
-                Ajukan Pinjaman <ChevronRight className="h-4 w-4" />
-              </Button>
+            <Link
+              href="/#form-pengajuan"
+              className="lp-btn lp-btn-soft pl-5 pr-1.5 py-1.5 gap-3 text-xs sm:text-sm"
+            >
+              Ajukan Pinjaman
+              <span className="lp-circle lp-circle-accent h-9 w-9">
+                <ArrowRight className="h-4 w-4" />
+              </span>
             </Link>
 
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden text-foreground cursor-pointer"
+            <button
+              type="button"
+              aria-label={mobileMenuOpen ? "Tutup menu" : "Buka menu"}
+              className="lg:hidden lp-circle lp-circle-light h-10 w-10 cursor-pointer"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
-              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </Button>
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
           </div>
         </div>
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t bg-background px-4 pt-3 pb-6 safe-bottom space-y-3 shadow-lg max-h-[85dvh] overflow-y-auto overscroll-contain drawer-enter">
+          <div className="lg:hidden border-t border-lp-border bg-lp-bg px-4 pt-3 pb-6 safe-bottom space-y-3 shadow-lg max-h-[85dvh] overflow-y-auto overscroll-contain drawer-enter">
             <nav className="flex flex-col space-y-2 text-sm font-medium">
               <Link
                 href="/"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted"
+                className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-lp-card-2"
               >
-                <Home className="h-4 w-4 text-primary" /> Beranda
+                <Home className="h-4 w-4 text-lp-brand" /> Beranda
               </Link>
               <Link
                 href="/#produk"
                 onClick={() => setMobileMenuOpen(false)}
-                className="px-3 py-2 rounded-md hover:bg-muted"
+                className="px-3 py-2 rounded-md hover:bg-lp-card-2"
               >
                 Produk & Layanan
               </Link>
 
               {/* Mobile Collapsible Laporan */}
-              <div className="border rounded-lg p-2 bg-muted/20 space-y-1">
+              <div className="border border-lp-border rounded-lg p-2 bg-lp-card-2/50 space-y-1">
                 <button
                   type="button"
                   onClick={() => setMobileReportOpen(!mobileReportOpen)}
-                  className="w-full flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-muted text-primary font-semibold text-sm cursor-pointer"
+                  className="w-full flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-lp-card-2 text-lp-brand font-semibold text-sm cursor-pointer"
                 >
                   <span className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-rose-500" /> Laporan Publikasi (PDF)
+                    <FileText className="h-4 w-4 text-lp-brand" /> Laporan Publikasi (PDF)
                   </span>
                   <ChevronDown
                     className={`h-4 w-4 transition-transform duration-200 ${
@@ -311,11 +309,11 @@ export function PublicHeader() {
                 </button>
 
                 {mobileReportOpen && (
-                  <div className="pl-4 pr-1 py-1 space-y-1.5 border-t pt-2">
+                  <div className="pl-4 pr-1 py-1 space-y-1.5 border-t border-lp-border pt-2">
                     <Link
                       href="/laporan"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center justify-between py-1 text-xs font-bold text-primary hover:underline"
+                      className="flex items-center justify-between py-1 text-xs font-bold text-lp-brand hover:underline"
                     >
                       <span>Lihat Semua Laporan</span>
                       <ChevronRight className="h-3 w-3" />
@@ -327,9 +325,9 @@ export function PublicHeader() {
                           key={item.id}
                           href={`/laporan/${item.slug}`}
                           onClick={() => setMobileMenuOpen(false)}
-                          className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground hover:text-foreground truncate"
+                          className="flex items-center gap-1.5 py-1 text-xs text-lp-muted hover:text-lp-text truncate"
                         >
-                          <FileText className="h-3 w-3 text-rose-500 shrink-0" />
+                          <FileText className="h-3 w-3 text-lp-brand shrink-0" />
                           <span className="truncate">{item.title}</span>
                         </Link>
                       ))
@@ -337,7 +335,7 @@ export function PublicHeader() {
                       <Link
                         href="/laporan"
                         onClick={() => setMobileMenuOpen(false)}
-                        className="block py-1 text-xs text-muted-foreground"
+                        className="block py-1 text-xs text-lp-muted"
                       >
                         Laporan Keuangan & GCG
                       </Link>
@@ -349,36 +347,36 @@ export function PublicHeader() {
               <Link
                 href="/berita"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted text-primary font-semibold"
+                className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-lp-card-2 text-lp-brand font-semibold"
               >
                 <FileText className="h-4 w-4" /> Berita & Kegiatan Kantor
               </Link>
               <Link
                 href="/galeri"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted text-primary font-semibold"
+                className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-lp-card-2 text-lp-brand font-semibold"
               >
                 <Camera className="h-4 w-4" /> Galeri Foto Kegiatan
               </Link>
               <Link
                 href="/#faq"
                 onClick={() => setMobileMenuOpen(false)}
-                className="px-3 py-2 rounded-md hover:bg-muted"
+                className="px-3 py-2 rounded-md hover:bg-lp-card-2"
               >
                 Tanya Jawab (FAQ)
               </Link>
               <Link
                 href="/#kontak"
                 onClick={() => setMobileMenuOpen(false)}
-                className="px-3 py-2 rounded-md hover:bg-muted"
+                className="px-3 py-2 rounded-md hover:bg-lp-card-2"
               >
                 Kontak & Lokasi Cabang
               </Link>
-              <div className="pt-2 border-t">
+              <div className="pt-2 border-t border-lp-border">
                 <Link
                   href="/login"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+                  className="flex items-center gap-2 px-3 py-2 text-xs text-lp-muted hover:text-lp-text"
                 >
                   <Lock className="h-3.5 w-3.5" /> Masuk Portal Staf Internal
                 </Link>

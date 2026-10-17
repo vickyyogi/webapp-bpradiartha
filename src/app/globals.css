@@ -49,6 +49,34 @@
   --color-yellow: var(--yellow);
   --color-yellow-soft: var(--yellow-soft);
   --color-surface: var(--surface);
+
+  /* Landing design system (lihat blok "Landing palette" di bawah) */
+  --color-lp-bg: var(--lp-bg);
+  --color-lp-bg-2: var(--lp-bg-2);
+  --color-lp-card: var(--lp-card);
+  --color-lp-card-2: var(--lp-card-2);
+  --color-lp-text: var(--lp-text);
+  --color-lp-muted: var(--lp-muted);
+  --color-lp-border: var(--lp-border);
+  --color-lp-accent: var(--lp-accent);
+  --color-lp-accent-hover: var(--lp-accent-hover);
+  --color-lp-accent-soft: var(--lp-accent-soft);
+  --color-lp-on-accent: var(--lp-on-accent);
+  --color-lp-brand: var(--lp-brand);
+  --color-lp-brand-hover: var(--lp-brand-hover);
+  --color-lp-brand-light: var(--lp-brand-light);
+  --color-lp-brand-soft: var(--lp-brand-soft);
+  --color-lp-brand-band: var(--lp-brand-band);
+  --color-lp-on-brand: var(--lp-on-brand);
+  --color-lp-band: var(--lp-band);
+  --color-lp-band-2: var(--lp-band-2);
+  --color-lp-band-text: var(--lp-band-text);
+  --color-lp-band-muted: var(--lp-band-muted);
+  --color-lp-band-border: var(--lp-band-border);
+  --color-lp-glow-violet: var(--lp-glow-violet);
+  --color-lp-glow-lime: var(--lp-glow-lime);
+  --color-lp-dot: var(--lp-dot);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -355,6 +383,88 @@
   --color-sky-950: oklch(97.7% 0.013 236.62);
 }
 
+/* ============================================================
+   Landing palette — referensi visual "Nexora" (lime + violet + ink)
+   SEMUA warna landing page disimpan di sini. Jangan menulis hex
+   langsung di komponen; gunakan var(--lp-*) atau utilitas Tailwind
+   (bg-lp-*, text-lp-*, dst.) yang terdaftar di @theme inline atas.
+   ============================================================ */
+:root {
+  /* Accent — Lime (CTA utama, ikon highlight) */
+  --lp-accent: #C8F24E;
+  --lp-accent-hover: #B9E83C;
+  --lp-accent-soft: rgba(200, 242, 78, 0.22);
+  --lp-on-accent: #16172B;
+
+  /* Brand — Violet (aksen judul, blob, stats band) */
+  --lp-brand: #6C5CE7;
+  --lp-brand-hover: #5A49D6;
+  --lp-brand-light: #A99BFF;
+  --lp-brand-soft: rgba(108, 92, 231, 0.12);
+  --lp-brand-band: #6C5CE7;
+  --lp-on-brand: #FFFFFF;
+
+  /* Deep ink band (kartu fitur, testimoni, footer) */
+  --lp-band: #1A1B2E;
+  --lp-band-2: #242642;
+  --lp-band-text: #FFFFFF;
+  --lp-band-muted: rgba(255, 255, 255, 0.66);
+  --lp-band-border: rgba(255, 255, 255, 0.12);
+
+  /* Permukaan terang */
+  --lp-bg: #F0EFF9;
+  --lp-bg-2: #E9E7F6;
+  --lp-card: #FFFFFF;
+  --lp-card-2: #F5F4FC;
+  --lp-text: #1A1B2E;
+  --lp-muted: #5B5D76;
+  --lp-border: rgba(26, 27, 46, 0.10);
+
+  /* Dekoratif */
+  --lp-hero-grad: linear-gradient(178deg, #CFC5F7 0%, #E6E2F9 42%, var(--lp-bg) 88%);
+  --lp-glow-violet: rgba(108, 92, 231, 0.40);
+  --lp-glow-lime: rgba(200, 242, 78, 0.38);
+  --lp-dot: rgba(108, 92, 231, 0.36);
+}
+
+.dark {
+  /* Accent — Lime tetap terang agar pop di latar gelap */
+  --lp-accent: #C8F24E;
+  --lp-accent-hover: #D7F86F;
+  --lp-accent-soft: rgba(200, 242, 78, 0.16);
+  --lp-on-accent: #16172B;
+
+  /* Brand — Violet lebih terang untuk kontras di gelap */
+  --lp-brand: #8B7CFF;
+  --lp-brand-hover: #9D90FF;
+  --lp-brand-light: #B7ADFF;
+  --lp-brand-soft: rgba(139, 124, 255, 0.16);
+  --lp-brand-band: #5243CE;
+  --lp-on-brand: #16172B;
+
+  /* Deep ink band (tetap gelap, sedikit lebih terang dari bg) */
+  --lp-band: #191B30;
+  --lp-band-2: #232543;
+  --lp-band-text: #FFFFFF;
+  --lp-band-muted: rgba(255, 255, 255, 0.66);
+  --lp-band-border: rgba(255, 255, 255, 0.12);
+
+  /* Permukaan gelap */
+  --lp-bg: #0F1020;
+  --lp-bg-2: #15162B;
+  --lp-card: #1B1D33;
+  --lp-card-2: #232543;
+  --lp-text: #F4F5FB;
+  --lp-muted: #A2A4BE;
+  --lp-border: rgba(255, 255, 255, 0.10);
+
+  /* Dekoratif */
+  --lp-hero-grad: linear-gradient(178deg, #2E2657 0%, #1C1B38 42%, var(--lp-bg) 88%);
+  --lp-glow-violet: rgba(139, 124, 255, 0.32);
+  --lp-glow-lime: rgba(200, 242, 78, 0.20);
+  --lp-dot: rgba(139, 124, 255, 0.42);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -383,6 +493,198 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* ============================================================
+   Landing components — semua warna mengambil dari --lp-*
+   ============================================================ */
+
+/* Tipografi display ala referensi: sans tebal, huruf besar, rapat */
+.lp-display {
+  font-family: var(--font-poppins), sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  line-height: 0.98;
+}
+
+/* Satu kata judul dengan gradien violet */
+.lp-text-gradient {
+  background-image: linear-gradient(100deg, var(--lp-brand) 0%, var(--lp-brand-light) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Label kecil huruf besar (eyebrow) */
+.lp-eyebrow {
+  font-family: var(--font-poppins), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+/* Tombol pill */
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-family: var(--font-poppins), sans-serif;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 200ms var(--ease-out),
+    color 200ms var(--ease-out),
+    border-color 200ms var(--ease-out),
+    box-shadow 200ms var(--ease-out);
+}
+.lp-btn-accent {
+  background: var(--lp-accent);
+  color: var(--lp-on-accent);
+  box-shadow: 0 14px 30px -14px var(--lp-glow-lime);
+}
+.lp-btn-accent:hover {
+  background: var(--lp-accent-hover);
+}
+.lp-btn-ink {
+  background: var(--lp-band);
+  color: var(--lp-band-text);
+}
+.lp-btn-ink:hover {
+  background: var(--lp-band-2);
+}
+.lp-btn-soft {
+  background: var(--lp-card);
+  color: var(--lp-text);
+  border: 1px solid var(--lp-border);
+}
+.lp-btn-soft:hover {
+  border-color: var(--lp-brand);
+  color: var(--lp-brand);
+}
+.lp-btn-band-ghost {
+  background: transparent;
+  color: var(--lp-band-text);
+  border: 1px solid var(--lp-band-border);
+}
+.lp-btn-band-ghost:hover {
+  border-color: var(--lp-accent);
+  color: var(--lp-accent);
+}
+.lp-btn:focus-visible,
+.lp-circle:focus-visible,
+.lp-chip:focus-visible {
+  outline: 2px solid var(--lp-brand);
+  outline-offset: 2px;
+}
+
+/* Tombol ikon bulat (panah produk, carousel, rail hero) */
+.lp-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition:
+    background-color 200ms var(--ease-out),
+    color 200ms var(--ease-out),
+    border-color 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+.lp-circle:hover {
+  transform: scale(1.06);
+}
+.lp-circle-accent {
+  background: var(--lp-accent);
+  color: var(--lp-on-accent);
+}
+.lp-circle-accent:hover {
+  background: var(--lp-accent-hover);
+}
+.lp-circle-dark {
+  background: var(--lp-band);
+  color: var(--lp-band-text);
+}
+.lp-circle-dark:hover {
+  background: var(--lp-band-2);
+}
+.lp-circle-light {
+  background: var(--lp-card);
+  color: var(--lp-text);
+  border: 1px solid var(--lp-border);
+}
+.lp-circle-light:hover {
+  border-color: var(--lp-brand);
+  color: var(--lp-brand);
+}
+
+/* Kartu permukaan */
+.lp-card {
+  background: var(--lp-card);
+  border: 1px solid var(--lp-border);
+  border-radius: 1.75rem;
+}
+
+/* Field form */
+.lp-input {
+  width: 100%;
+  background: var(--lp-card-2);
+  color: var(--lp-text);
+  border: 1px solid var(--lp-border);
+  border-radius: 0.9rem;
+  padding: 0.7rem 1rem;
+  font-size: 0.9rem;
+  transition: border-color 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+.lp-input::placeholder {
+  color: var(--lp-muted);
+}
+.lp-input:focus {
+  outline: none;
+  border-color: var(--lp-brand);
+  box-shadow: 0 0 0 4px var(--lp-brand-soft);
+}
+.lp-input:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+/* Chip pilihan (mis. tenor) */
+.lp-chip {
+  border-radius: 0.9rem;
+  border: 1px solid var(--lp-border);
+  background: var(--lp-card-2);
+  color: var(--lp-muted);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 160ms var(--ease-out),
+    color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out);
+}
+.lp-chip:hover {
+  border-color: var(--lp-brand);
+  color: var(--lp-brand);
+}
+.lp-chip-active {
+  background: var(--lp-accent);
+  border-color: var(--lp-accent);
+  color: var(--lp-on-accent);
+  box-shadow: 0 10px 22px -12px var(--lp-glow-lime);
+}
+
+/* Pola titik dekoratif (hero) */
+.lp-dots {
+  background-image: radial-gradient(var(--lp-dot) 1.5px, transparent 1.5px);
+  background-size: 16px 16px;
+}
+
+/* Latar gradien hero */
+.lp-hero-bg {
+  background: var(--lp-hero-grad);
 }
 
 /* Micro-animations for landing page */

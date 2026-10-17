@@ -186,9 +186,7 @@ function drawCoverHeader(doc: PdfDoc, data: SlikAnalysis) {
   });
   const meta = [
     `Tanggal Cetak: ${tanggalCetak}`,
-    `Nomor Laporan: ${data.header.nomor_laporan}`,
-    `Posisi Data: ${data.header.posisi_data}`,
-    `Operator: ${data.header.operator}`,
+    `Posisi Data: ${data.header.posisi_data}`
   ].join("  |  ");
   doc.text(meta, MARGIN_X, 26);
 
@@ -772,7 +770,7 @@ function drawIndexPage(flow: Flow, entries: SlikReportEntry[], autoTableFn: Auto
     body: entries.map((entry, index) => [
       String(index + 1),
       entry.data.data_pribadi.nama_lengkap || "-",
-      entry.data.header.nomor_laporan || "-",
+      entry.data.header.posisi_data || "-",
       formatRupiah(entry.data.ringkasan_eksposur.total_baki_debet),
       entry.data.analisis_dan_rekomendasi.keputusan_komite.rekomendasi,
       entry.data.analisis_dan_rekomendasi.keputusan_komite.risk_rating,

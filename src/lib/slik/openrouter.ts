@@ -48,9 +48,7 @@ export class SlikAnalyzerError extends Error {
 
 const SCHEMA_TEMPLATE = `{
   "header": {
-    "nomor_laporan": "string",
     "posisi_data": "string",
-    "operator": "string"
   },
   "data_pribadi": {
     "nama_lengkap": "string",
