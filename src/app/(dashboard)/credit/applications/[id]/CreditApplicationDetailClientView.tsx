@@ -150,6 +150,13 @@ type SlikVerificationItem = {
   verifiedAt: string | Date;
 };
 
+/**
+ * Tahap 5B (P0.5): panjang minimum alasan keputusan akhir (APPROVED/REJECTED).
+ * Harus tetap sama dengan `DECISION_NOTES_MIN_LENGTH` di
+ * `src/app/api/credit/applications/[id]/route.ts` (server otoritatif).
+ */
+const DECISION_NOTES_MIN_LENGTH = 10;
+
 type CreditApplicationDetail = {
   id: string;
   applicationNumber: string;
@@ -394,6 +401,18 @@ export function CreditApplicationDetailClientView({
   };
 
   const handleSaveDecision = async (statusOverride?: string, slikOverrideReason = "") => {
+    // Tahap 5B (P0.5): pencegahan awal — keputusan akhir wajib beralasan.
+    const targetStatus = statusOverride || decisionData.status;
+    if (
+      (targetStatus === "APPROVED" || targetStatus === "REJECTED") &&
+      decisionData.decisionNotes.trim().length < DECISION_NOTES_MIN_LENGTH
+    ) {
+      showNotification(
+        "error",
+        `Keputusan ${targetStatus} wajib mencantumkan alasan/pertimbangan (min. ${DECISION_NOTES_MIN_LENGTH} karakter) pada Catatan / Risalah Sidang Komite Kredit.`
+      );
+      return;
+    }
     setIsSaving(true);
     try {
       const payload = {

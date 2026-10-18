@@ -20,6 +20,13 @@ const DECISION_STATUSES: CreditApplicationStatus[] = [
   CreditApplicationStatus.REJECTED,
 ];
 
+/**
+ * Tahap 5B (P0.5): panjang minimum alasan/pertimbangan pejabat pemutus untuk
+ * keputusan akhir. Nilai ini juga dipakai oleh UI sebagai pencegahan awal —
+ * server tetap otoritatif.
+ */
+const DECISION_NOTES_MIN_LENGTH = 10;
+
 async function ensureAssignable(
   organizationId: string,
   branchAllowed: (branchId?: string | null) => boolean,
@@ -283,6 +290,21 @@ export async function PUT(
       if (status === "APPROVED" || status === "REJECTED" || status === "DECISION") {
         updateData.decisionDate = new Date();
         updateData.decisionMakerId = currentUser.id;
+      }
+
+      // Tahap 5B (P0.5): pejabat pemutus wajib mencatat keputusan akhir beserta
+      // alasan/pertimbangannya — analisis AI hanya bahan, bukan keputusan final.
+      if (DECISION_STATUSES.includes(status as CreditApplicationStatus)) {
+        const decisionNotesText = typeof decisionNotes === "string" ? decisionNotes.trim() : "";
+        if (decisionNotesText.length < DECISION_NOTES_MIN_LENGTH) {
+          return NextResponse.json(
+            {
+              error: `Keputusan ${status} wajib mencantumkan alasan/pertimbangan pejabat pemutus (min. ${DECISION_NOTES_MIN_LENGTH} karakter) pada Catatan Keputusan.`,
+              code: "DECISION_NOTES_REQUIRED",
+            },
+            { status: 400 }
+          );
+        }
       }
 
       // Pemisahan tugas (Maker-Checker): pemutus tidak boleh orang yang sama dengan

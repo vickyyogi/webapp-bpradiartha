@@ -176,6 +176,16 @@ function drawCoverHeader(doc: PdfDoc, data: SlikAnalysis) {
   setColor(doc, DARK);
   doc.text("RINGKASAN & ANALISIS SLIK OJK (IDEB)", MARGIN_X, 21);
 
+  // Klausal keterbacaan hasil AI (Tahap 5B): AI = alat bantu, bukan keputusan.
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(7);
+  setColor(doc, MUTED);
+  doc.text(
+    "Disusun dengan bantuan AI dari teks dokumen SLIK — alat bantu analisis, bukan keputusan kredit.",
+    MARGIN_X,
+    24.5
+  );
+
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   setColor(doc, MUTED);
@@ -190,11 +200,11 @@ function drawCoverHeader(doc: PdfDoc, data: SlikAnalysis) {
     `Posisi Data: ${data.header.posisi_data}`,
     `Operator: ${data.header.operator}`
   ].join("  |  ");
-  doc.text(meta, MARGIN_X, 26);
+  doc.text(meta, MARGIN_X, 27.5);
 
   doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
   doc.setLineWidth(0.2);
-  doc.line(MARGIN_X, 28, PAGE_W - MARGIN_X, 28);
+  doc.line(MARGIN_X, 29.5, PAGE_W - MARGIN_X, 29.5);
 }
 
 interface PanelRow {
@@ -424,6 +434,21 @@ function buildDecisionItems(flow: Flow, data: SlikAnalysis, title: string): BoxI
   const theme = decisionTheme(komite.rekomendasi);
   const items: BoxItem[] = [];
 
+  // Klausal AI (Tahap 5B): hasil AI adalah bahan analisis, bukan keputusan final.
+  items.push({
+    height: 6,
+    draw: (f, top) => {
+      f.doc.setFont("helvetica", "italic");
+      f.doc.setFontSize(7.5);
+      setColor(f.doc, MUTED);
+      f.doc.text(
+        "Alat bantu analisis AI — bukan keputusan kredit. Keputusan akhir oleh pejabat pemutus.",
+        innerX,
+        top + 4
+      );
+    },
+  });
+
   // Baris status: rekomendasi (kiri) & risk rating (kanan).
   items.push({
     height: 7,
@@ -431,7 +456,7 @@ function buildDecisionItems(flow: Flow, data: SlikAnalysis, title: string): BoxI
       f.doc.setFont("helvetica", "bold");
       f.doc.setFontSize(10);
       setColor(f.doc, theme.text);
-      f.doc.text(`REKOMENDASI: ${komite.rekomendasi}`, innerX, top + 5);
+      f.doc.text(`REKOMENDASI AI: ${komite.rekomendasi}`, innerX, top + 5);
       f.doc.text(`RISK RATING: ${komite.risk_rating}`, MARGIN_X + CONTENT_W - 4, top + 5, { align: "right" });
     },
   });
@@ -721,9 +746,10 @@ function renderSlikBody(flow: Flow, data: SlikAnalysis, autoTableFn: AutoTableFn
 
   // Kotak keputusan komite
   const theme = decisionTheme(data.analisis_dan_rekomendasi.keputusan_komite.rekomendasi);
-  const items = buildDecisionItems(flow, data, "KEPUTUSAN KOMITE / ANALIS KREDIT");
+  const decisionTitle = "REKOMENDASI AI — BAHAN KEPUTUSAN KOMITE / ANALIS KREDIT";
+  const items = buildDecisionItems(flow, data, decisionTitle);
   drawBoxWithItems(flow, runnerTitle, {
-    title: "KEPUTUSAN KOMITE / ANALIS KREDIT",
+    title: decisionTitle,
     fill: theme.fill,
     border: theme.border,
     titleColor: theme.text,
@@ -768,7 +794,7 @@ function drawIndexPage(flow: Flow, entries: SlikReportEntry[], autoTableFn: Auto
 
   autoTableFn(doc, {
     startY: 38,
-    head: [["No", "Nama Debitur", "Nomor Laporan", "Baki Debet", "Rekomendasi", "Risk Rating"]],
+    head: [["No", "Nama Debitur", "Nomor Laporan", "Baki Debet", "Rekomendasi AI", "Risk Rating"]],
     body: entries.map((entry, index) => [
       String(index + 1),
       entry.data.data_pribadi.nama_lengkap || "-",
@@ -791,7 +817,7 @@ function drawIndexPage(flow: Flow, entries: SlikReportEntry[], autoTableFn: Auto
   doc.setFontSize(7.5);
   setColor(doc, MUTED);
   doc.text(
-    "Laporan ini dihasilkan otomatis dari analisa dokumen SLIK OJK. Wajib diverifikasi analis kredit sebelum dipakai.",
+    "Dihasilkan otomatis dengan bantuan AI — alat bantu analisis, bukan keputusan kredit. Wajib diverifikasi analis sebelum dipakai.",
     MARGIN_X,
     Math.min(endY, BOTTOM_LIMIT - 4)
   );

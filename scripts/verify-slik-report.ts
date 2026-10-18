@@ -272,6 +272,8 @@ async function run(label: string, data: SlikAnalysis) {
     ["judul CREDIT RISK ASSESSMENT", text.includes("CREDIT RISK ASSESSMENT")],
     ["bagian keputusan komite", /KEPUTUSAN KOMITE/i.test(text)],
     ["rekomendasi tercetak", text.includes(data.analisis_dan_rekomendasi.keputusan_komite.rekomendasi)],
+    ["label REKOMENDASI AI", text.includes("REKOMENDASI AI")],
+    ["disclaimer alat bantu AI", /alat bantu/i.test(text)],
     ["nomor halaman dinamis", new RegExp(`Halaman 1 dari ${pages}`).test(text)],
   ];
   for (const [name, ok] of expectations) {

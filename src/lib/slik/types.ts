@@ -297,6 +297,110 @@ export function normalizeSlikAnalysis(raw: unknown): { data: SlikAnalysis; issue
   return { data, issues };
 }
 
+/* ------------------------------------------------------------------ */
+/* Audit output: prompt injection & konsistensi (Tahap 5B — P0.5)      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Frasa mirip instruksi manipulasi yang sering muncul dalam serangan prompt
+ * injection — bisa tersalin dari dokumen ke output model oleh sebab biasa
+ * (model meniru teks yang dibacanya). Kehadirannya bukan bukti manipulasi,
+ * melainkan sinyal untuk memeriksa dokumen sumber.
+ */
+const INJECTION_PHRASES: string[] = [
+  "ignore previous",
+  "ignore all previous",
+  "disregard previous",
+  "abaikan instruksi",
+  "abaikan perintah",
+  "abaikan aturan sebelumnya",
+  "lupakan instruksi",
+  "ubah rekomendasi",
+  "ganti rekomendasi",
+  "menjadi approve",
+  "jadi approve",
+  "system prompt",
+  "perintah sistem",
+  "instruksi sistem",
+];
+
+/** Kumpulkan seluruh string di dalam struktur hasil (rekursif, tidak melempar). */
+function collectStrings(value: unknown, out: string[] = []): string[] {
+  if (typeof value === "string") {
+    out.push(value);
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectStrings(item, out);
+  } else if (isRecord(value)) {
+    for (const item of Object.values(value)) collectStrings(item, out);
+  }
+  return out;
+}
+
+/** Kolektibilitas bernilai buruk (kol 3–5 / DPK / macet / diragukan / hapus buku). */
+function kolektibilitasBuruk(value: string): boolean {
+  const upper = value.toUpperCase();
+  if (/(MACET|DIRAGUKAN|HAPUS|DPK|PERHATIAN)/.test(upper)) return true;
+  return /(^|\D)[3-5](\D|$)/.test(upper);
+}
+
+/**
+ * Audit kepercayaan hasil output model (Tahap 5B — P0.5):
+ *
+ * 1. **Konsistensi semantik** — rekomendasi `APPROVE` padahal angka ekstraksi
+ *    menunjukkan tunggakan atau kolektibilitas buruk: bertentangan dengan aturan
+ *    sistem dan bisa jadi akibat manipulasi isi dokumen (prompt injection) atau
+ *    kegagalan model.
+ * 2. **Pemindaian frasa injeksi** — instruksi manipulasi dari dokumen yang tersalin
+ *    ke output model.
+ *
+ * Mengembalikan daftar peringatan (mengalir ke `warnings` → tampil di UI +
+ * meta record). Tidak pernah melempar dan tidak memblokir: hasil tetap menjadi
+ * bahan verifikasi manual petugas, bukan keputusan.
+ */
+export function auditSlikOutput(data: SlikAnalysis): string[] {
+  const warnings: string[] = [];
+  const keputusan = data.analisis_dan_rekomendasi.keputusan_komite;
+
+  if (keputusan.rekomendasi === "APPROVE") {
+    const signals: string[] = [];
+    if (kolektibilitasBuruk(data.ringkasan_eksposur.kualitas_terburuk)) {
+      signals.push(`kualitas terburuk "${data.ringkasan_eksposur.kualitas_terburuk}"`);
+    }
+    const fasilitasBuruk = data.fasilitas.find((f) => kolektibilitasBuruk(f.kolektibilitas));
+    if (fasilitasBuruk) {
+      signals.push(`kolektibilitas "${fasilitasBuruk.kolektibilitas}" (${fasilitasBuruk.bank_pelapor})`);
+    }
+    if (data.rincian_tunggakan.total_tunggakan_real > 0) {
+      signals.push(`tunggakan ${formatRupiah(data.rincian_tunggakan.total_tunggakan_real)}`);
+    }
+    const telat = data.fasilitas.find((f) => f.hari_tunggakan > 0);
+    if (telat) signals.push(`hari tunggakan ${telat.hari_tunggakan} (${telat.bank_pelapor})`);
+
+    if (signals.length > 0) {
+      warnings.push(
+        `Rekomendasi AI APPROVE tidak konsisten dengan data ekstraksi: ${signals.join("; ")}. ` +
+          `Hasil bisa jadi akibat manipulasi isi dokumen (prompt injection) atau kegagalan model — verifikasi manual wajib sebelum dipakai.`
+      );
+    }
+  }
+
+  const found = new Set<string>();
+  for (const value of collectStrings(data)) {
+    const lower = value.toLowerCase();
+    for (const phrase of INJECTION_PHRASES) {
+      if (lower.includes(phrase)) found.add(`"${phrase}"`);
+    }
+  }
+  if (found.size > 0) {
+    warnings.push(
+      `Output mengandung frasa mirip instruksi manipulasi (kemungkinan prompt injection dari dokumen): ` +
+        `${[...found].slice(0, 5).join(", ")}. Periksa dokumen sumber dan jangan taati instruksi tersebut.`
+    );
+  }
+
+  return warnings;
+}
+
 /** Dipakai generator PDF: format rupiah yang konsisten untuk seluruh laporan. */
 export function formatRupiah(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "Rp 0";
