@@ -16,6 +16,7 @@ import {
   overrideRoleLabel,
   resolveOverrideActor,
 } from "../src/lib/slik/override";
+import { detectCorrections, validateVerificationInput } from "../src/lib/slik/verification";
 import {
   buildScopeFilter,
   recordInScope,
@@ -99,6 +100,45 @@ function logicTests(): void {
     "analis/komite TIDAK berwenang mengisi alasan",
     resolveOverrideActor(actor, {}) === null
   );
+
+  console.log("== 1c. Verifikasi manual angka ekstraksi AI ==");
+  check(
+    "input tanpa angka ditolak",
+    validateVerificationInput({ kolektibilitas: "Lancar" }) !== null
+  );
+  check(
+    "angka negatif/bukan angka ditolak",
+    validateVerificationInput({ bakiDebet: -1, tunggakan: "abc", kolektibilitas: "1" }) !== null
+  );
+  check(
+    "kolektibilitas wajib diisi",
+    validateVerificationInput({ bakiDebet: 1, tunggakan: 1, kolektibilitas: "  " }) !== null
+  );
+  check(
+    "catatan terlalu panjang ditolak",
+    validateVerificationInput({ bakiDebet: 1, tunggakan: 1, kolektibilitas: "1", note: "x".repeat(1001) }) !== null
+  );
+  check(
+    "input lengkap sah (termasuk angka nol)",
+    validateVerificationInput({ bakiDebet: 0, tunggakan: 12345.67, kolektibilitas: "1 - Lancar", note: "sesuai PDF" }) === null
+  );
+  const aiFigs = { bakiDebet: 1000000, tunggakan: 0, kolektibilitas: "1" };
+  check(
+    "tanpa koreksi = daftar kosong",
+    detectCorrections(aiFigs, { ...aiFigs }).length === 0
+  );
+  check(
+    "koreksi nilai terdeteksi",
+    detectCorrections(aiFigs, { ...aiFigs, bakiDebet: 950000 }).length === 1
+  );
+  check(
+    "koreksi AI-null -> nilai terdeteksi",
+    detectCorrections({ ...aiFigs, bakiDebet: null }, { ...aiFigs, bakiDebet: 500000 }).length === 1
+  );
+  check(
+    "koreksi kolektibilitas terdeteksi",
+    detectCorrections(aiFigs, { ...aiFigs, kolektibilitas: "2" }).map((c) => c.field).join() === "kolektibilitas"
+  );
 }
 
 async function dbTests(): Promise<void> {
@@ -147,6 +187,7 @@ async function dbTests(): Promise<void> {
 
   const createdIds: string[] = [];
   const createdOverrideIds: string[] = [];
+  const createdVerificationIds: string[] = [];
   try {
     const record = await prisma.slikAnalysisRecord.create({ data: baseRecord });
     createdIds.push(record.id);
@@ -187,8 +228,8 @@ async function dbTests(): Promise<void> {
       withFileTypes: true,
     }).filter((entry) => entry.isDirectory());
     check(
-      "jumlah folder migrasi = 22 (tidak ada migrasi hilang)",
-      migrations.length === 22,
+      "jumlah folder migrasi = 23 (tidak ada migrasi hilang)",
+      migrations.length === 23,
       `ditemukan ${migrations.length}`
     );
 
@@ -287,7 +328,64 @@ async function dbTests(): Promise<void> {
       select: { id: true },
     });
     check("alasan tidak berlaku untuk analisa lain (analisa REJECT baru wajib ditanggapi)", uncovered === null);
+
+    console.log("== 5. Verifikasi manual angka ekstraksi AI ==");
+    const verification = await prisma.slikAnalysisVerification.create({
+      data: {
+        organizationId: organization.id,
+        slikAnalysisRecordId: record.id,
+        aiBakiDebet: 1000000,
+        aiTunggakan: 0,
+        aiKolektibilitas: "1",
+        confirmedBakiDebet: 950000, // koreksi terhadap dokumen asli
+        confirmedTunggakan: 0,
+        confirmedKolektibilitas: "1",
+        note: "Angka AI beda dengan dokumen asli (tabel halaman 2 terpotong).",
+        verifiedById: user.id,
+        verifiedByName: user.fullName,
+      },
+    });
+    createdVerificationIds.push(verification.id);
+
+    const verificationBack = await prisma.slikAnalysisVerification.findUnique({
+      where: { id: verification.id },
+      include: { slikAnalysisRecord: true, verifiedBy: true },
+    });
+    check(
+      "verifikasi tersimpan & terkait record + petugas",
+      Boolean(verificationBack?.slikAnalysisRecord && verificationBack?.verifiedBy)
+    );
+    check(
+      "snapshot nilai AI ikut tersimpan sebagai pembanding",
+      verificationBack?.aiBakiDebet === 1000000 && verificationBack?.aiKolektibilitas === "1"
+    );
+    check(
+      "koreksi terdeteksi (AI ≠ konfirmasi petugas)",
+      verificationBack
+        ? detectCorrections(
+            {
+              bakiDebet: verificationBack.aiBakiDebet,
+              tunggakan: verificationBack.aiTunggakan,
+              kolektibilitas: verificationBack.aiKolektibilitas,
+            },
+            {
+              bakiDebet: verificationBack.confirmedBakiDebet,
+              tunggakan: verificationBack.confirmedTunggakan,
+              kolektibilitas: verificationBack.confirmedKolektibilitas,
+            }
+          ).length === 1
+        : false
+    );
+
+    const gatePassed = await prisma.slikAnalysisVerification.findFirst({
+      where: { slikAnalysisRecordId: record.id },
+      select: { id: true },
+    });
+    check("gate 5C terpuaskan bila ada verifikasi untuk analisa terkait", Boolean(gatePassed));
   } finally {
+    for (const id of createdVerificationIds) {
+      await prisma.slikAnalysisVerification.delete({ where: { id } }).catch(() => undefined);
+    }
     for (const id of createdOverrideIds) {
       await prisma.creditSlikOverride.delete({ where: { id } }).catch(() => undefined);
     }

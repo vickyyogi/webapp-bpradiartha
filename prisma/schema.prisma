@@ -43,8 +43,9 @@ model Organization {
   cmsReports           CmsReport[]
   cmsHeroSlides        CmsHeroSlide[]
   masterItems          MasterItem[]
-  slikAnalysisRecords  SlikAnalysisRecord[]
-  creditSlikOverrides  CreditSlikOverride[]
+  slikAnalysisRecords      SlikAnalysisRecord[]
+  creditSlikOverrides      CreditSlikOverride[]
+  slikAnalysisVerifications SlikAnalysisVerification[]
 
   @@map("organizations")
 }
@@ -156,6 +157,7 @@ model User {
   performedWorkflowActions       WorkflowAction[]       @relation("WorkflowActionActor")
   createdSlikAnalyses            SlikAnalysisRecord[]    @relation("SlikAnalysisCreatedBy")
   recordedSlikOverrides          CreditSlikOverride[]    @relation("SlikOverrideRecorder")
+  verifiedSlikAnalyses           SlikAnalysisVerification[] @relation("SlikVerificationVerifier")
   auditLogs                      AuditLog[]             @relation("AuditLogUser")
   notifications                  Notification[]         @relation("UserNotifications")
   mfaBackupCodes                 MfaBackupCode[]
@@ -584,11 +586,47 @@ model SlikAnalysisRecord {
   creditApplication CreditApplication? @relation(fields: [creditApplicationId], references: [id])
   createdBy         User?              @relation("SlikAnalysisCreatedBy", fields: [createdById], references: [id])
 
-  overrides CreditSlikOverride[]
+  overrides      CreditSlikOverride[]
+  verifications  SlikAnalysisVerification[]
 
   @@index([organizationId, createdAt])
   @@index([organizationId, customerId])
   @@map("slik_analysis_records")
+}
+
+/// Verifikasi manual angka hasil ekstraksi AI (Tahap 5B — P0.5).
+/// Sebelum hasil AI dipakai dalam Analisis 5C, petugas membandingkan baki
+/// debet, tunggakan, dan kolektibilitas terhadap dokumen SLIK asli. Nilai AI
+/// (snapshot) dan nilai konfirmasi disimpan berdampingan: koreksi terekam
+/// berjejak, record hasil AI tidak pernah diubah. Float pada kolom nominal
+/// dipertahankan mengikuti status quo — migrasi Decimal di P0.6 (Tahap 6).
+model SlikAnalysisVerification {
+  id                   String   @id @default(uuid()) @db.Uuid
+  organizationId       String   @map("organization_id") @db.Uuid
+  slikAnalysisRecordId String?  @map("slik_analysis_record_id") @db.Uuid
+
+  // Snapshot nilai AI saat diverifikasi (pembanding koreksi).
+  aiBakiDebet      Float?  @map("ai_baki_debet")
+  aiTunggakan      Float?  @map("ai_tunggakan")
+  aiKolektibilitas String? @map("ai_kolektibilitas") @db.VarChar(100)
+
+  // Nilai yang dikonfirmasi petugas terhadap dokumen asli
+  // (sama = konfirmasi murni; beda = koreksi, tercatat berjejak).
+  confirmedBakiDebet      Float?  @map("confirmed_baki_debet")
+  confirmedTunggakan      Float?  @map("confirmed_tunggakan")
+  confirmedKolektibilitas String? @map("confirmed_kolektibilitas") @db.VarChar(100)
+
+  note           String?  @db.Text
+  verifiedById   String?  @map("verified_by_id") @db.Uuid
+  verifiedByName String   @map("verified_by_name") @db.VarChar(200)
+  verifiedAt     DateTime @default(now()) @map("verified_at") @db.Timestamptz
+
+  organization       Organization        @relation(fields: [organizationId], references: [id])
+  slikAnalysisRecord SlikAnalysisRecord? @relation(fields: [slikAnalysisRecordId], references: [id])
+  verifiedBy         User?               @relation("SlikVerificationVerifier", fields: [verifiedById], references: [id])
+
+  @@index([slikAnalysisRecordId, verifiedAt])
+  @@map("slik_analysis_verifications")
 }
 
 /// Alasan penerusan pengajuan meski rekomendasi AI = REJECT (Tahap 5B — P0.5).

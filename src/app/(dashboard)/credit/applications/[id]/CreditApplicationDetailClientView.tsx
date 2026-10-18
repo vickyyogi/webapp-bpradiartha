@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { formatRupiah, type SlikAnalysis } from "@/lib/slik/types";
 import { isContinuationStatus, OVERRIDE_REASON_MIN_LENGTH, overrideRoleLabel } from "@/lib/slik/override";
+import { detectCorrections, type SlikFigureCorrection } from "@/lib/slik/verification";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -134,6 +135,21 @@ type OverrideTarget =
   | { kind: "transition"; nextStatus: string; defaultNote: string }
   | { kind: "decision"; nextStatus: string; statusOverride?: string };
 
+/** Verifikasi manual angka ekstraksi AI (Tahap 5B) — nilai AI + konfirmasi petugas. */
+type SlikVerificationItem = {
+  id: string;
+  slikAnalysisRecordId?: string | null;
+  aiBakiDebet?: number | null;
+  aiTunggakan?: number | null;
+  aiKolektibilitas?: string | null;
+  confirmedBakiDebet?: number | null;
+  confirmedTunggakan?: number | null;
+  confirmedKolektibilitas?: string | null;
+  note?: string | null;
+  verifiedByName: string;
+  verifiedAt: string | Date;
+};
+
 type CreditApplicationDetail = {
   id: string;
   applicationNumber: string;
@@ -205,10 +221,18 @@ function deriveSlikStatus(analyses: SlikAnalysisSummary[]): string {
   return raw;
 }
 
+/** Label tampilan untuk selisih koreksi verifikasi angka. */
+const FIGURE_FIELD_LABELS: Record<SlikFigureCorrection["field"], string> = {
+  bakiDebet: "baki debet",
+  tunggakan: "tunggakan",
+  kolektibilitas: "kolektibilitas",
+};
+
 export function CreditApplicationDetailClientView({
   application: initialApp,
   initialDocuments = [],
   initialSlikAnalyses = [],
+  initialSlikVerifications = [],
   slikGate,
   slikOverrides = [],
 }: {
@@ -216,12 +240,22 @@ export function CreditApplicationDetailClientView({
   users: Array<{ id: string; fullName: string; email: string }>;
   initialDocuments?: DocumentItem[];
   initialSlikAnalyses?: SlikAnalysisSummary[];
+  initialSlikVerifications?: SlikVerificationItem[];
   slikGate?: SlikGateState;
   slikOverrides?: SlikOverrideItem[];
 }) {
   const [app, setApp] = useState(initialApp);
   const [slikAnalyses] = useState<SlikAnalysisSummary[]>(initialSlikAnalyses);
+  const [slikVerifications, setSlikVerifications] = useState<SlikVerificationItem[]>(
+    initialSlikVerifications
+  );
   const [downloadingSlikId, setDownloadingSlikId] = useState<string | null>(null);
+
+  // Tahap 5B: dialog verifikasi manual angka ekstraksi AI.
+  const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
+  const [verifyForm, setVerifyForm] = useState({ bakiDebet: "", tunggakan: "", kolektibilitas: "", note: "" });
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   // Tahap 5B: dialog alasan penerusan pengajuan meski rekomendasi AI = REJECT.
   const [overrideDialogOpen, setOverrideDialogOpen] = useState(false);
@@ -474,6 +508,82 @@ export function CreditApplicationDetailClientView({
       await handleSaveDecision(target.statusOverride, reason);
     }
   };
+
+  /**
+   * Tahap 5B: verifikasi manual angka ekstraksi AI — isian disiapkan dari
+   * nilai AI terbaru, petugas membandingkan ke dokumen asli lalu mengonfirmasi
+   * / mengoreksi. Tersimpan sebagai record baru (riwayat koreksi berjejak).
+   */
+  const openVerifyDialog = () => {
+    const latest = slikAnalyses[0];
+    if (!latest) return;
+    setVerifyForm({
+      bakiDebet: latest.totalBakiDebet != null ? String(latest.totalBakiDebet) : "",
+      tunggakan: latest.totalTunggakanReal != null ? String(latest.totalTunggakanReal) : "",
+      kolektibilitas: latest.kualitasTerburuk ?? "",
+      note: "",
+    });
+    setVerifyError(null);
+    setVerifyDialogOpen(true);
+  };
+
+  const confirmVerify = async () => {
+    const latest = slikAnalyses[0];
+    if (!latest || isVerifying) return;
+    const bakiDebet = Number(verifyForm.bakiDebet);
+    const tunggakan = Number(verifyForm.tunggakan);
+    if (!Number.isFinite(bakiDebet) || bakiDebet < 0 || !Number.isFinite(tunggakan) || tunggakan < 0) {
+      setVerifyError("Baki debet dan tunggakan wajib berupa angka nol atau lebih.");
+      return;
+    }
+    if (!verifyForm.kolektibilitas.trim()) {
+      setVerifyError("Kolektibilitas wajib diisi sesuai dokumen SLIK asli.");
+      return;
+    }
+    setIsVerifying(true);
+    try {
+      const res = await fetch(`/api/slik/analyses/${latest.id}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bakiDebet,
+          tunggakan,
+          kolektibilitas: verifyForm.kolektibilitas.trim(),
+          note: verifyForm.note,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal menyimpan verifikasi angka.");
+      setSlikVerifications((prev) => [json.verification, ...prev]);
+      setVerifyDialogOpen(false);
+      setVerifyForm({ bakiDebet: "", tunggakan: "", kolektibilitas: "", note: "" });
+      showNotification("success", "Verifikasi angka SLIK tersimpan — koreksi (jika ada) terekam berjejak.");
+    } catch (e) {
+      setVerifyError(e instanceof Error ? e.message : "Gagal menyimpan verifikasi angka.");
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  /** Verifikasi terbaru untuk analisa yang dipakai (angka panel = analisa terbaru). */
+  const latestVerification =
+    slikAnalyses.length > 0
+      ? (slikVerifications.find((item) => item.slikAnalysisRecordId === slikAnalyses[0].id) ?? null)
+      : null;
+  const latestCorrections: SlikFigureCorrection[] = latestVerification
+    ? detectCorrections(
+        {
+          bakiDebet: latestVerification.aiBakiDebet ?? null,
+          tunggakan: latestVerification.aiTunggakan ?? null,
+          kolektibilitas: latestVerification.aiKolektibilitas ?? null,
+        },
+        {
+          bakiDebet: latestVerification.confirmedBakiDebet ?? null,
+          tunggakan: latestVerification.confirmedTunggakan ?? null,
+          kolektibilitas: latestVerification.confirmedKolektibilitas ?? null,
+        }
+      )
+    : [];
 
   const handleUploadDoc = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -866,6 +976,64 @@ export function CreditApplicationDetailClientView({
                       </Badge>
                     </div>
                   </div>
+                  {/* Tahap 5B: status verifikasi manual angka ekstraksi AI */}
+                  {latestVerification ? (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2.5 text-xs dark:border-emerald-900 dark:bg-emerald-950/20">
+                      <p className="font-semibold text-emerald-800 dark:text-emerald-400">
+                        Angka Terverifikasi Manual
+                        <span className="ml-1 font-normal text-muted-foreground">
+                          — {latestVerification.verifiedByName} ·{" "}
+                          {new Date(latestVerification.verifiedAt).toLocaleString("id-ID")}
+                        </span>
+                      </p>
+                      <p className="mt-1 leading-relaxed text-muted-foreground">
+                        Baki debet:{" "}
+                        <span className="font-medium text-foreground">
+                          {formatRupiah(latestVerification.confirmedBakiDebet ?? 0)}
+                        </span>{" "}
+                        · Tunggakan:{" "}
+                        <span className="font-medium text-foreground">
+                          {formatRupiah(latestVerification.confirmedTunggakan ?? 0)}
+                        </span>{" "}
+                        · Kolektibilitas:{" "}
+                        <span className="font-medium text-foreground">
+                          {latestVerification.confirmedKolektibilitas || "-"}
+                        </span>
+                      </p>
+                      {latestCorrections.length > 0 && (
+                        <p className="mt-1 leading-relaxed text-amber-700 dark:text-amber-400">
+                          Dikoreksi dari nilai AI:{" "}
+                          {latestCorrections
+                            .map((c) => `${FIGURE_FIELD_LABELS[c.field]}: ${c.from} → ${c.to}`)
+                            .join(" · ")}
+                        </p>
+                      )}
+                      {latestVerification.note && (
+                        <p className="mt-1 italic leading-relaxed text-muted-foreground">
+                          Catatan: {latestVerification.note}
+                        </p>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 h-7 gap-1 text-xs"
+                        onClick={openVerifyDialog}
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5" /> Verifikasi Ulang
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      <p className="min-w-0 flex-1 leading-relaxed">
+                        Angka AI di atas <span className="font-semibold">belum diverifikasi manual</span> —
+                        wajib dibandingkan ke dokumen SLIK asli sebelum Analisis 5C disimpan.
+                      </p>
+                      <Button size="sm" className="h-7 gap-1 text-xs" onClick={openVerifyDialog}>
+                        <ShieldCheck className="h-3.5 w-3.5" /> Verifikasi Angka
+                      </Button>
+                    </div>
+                  )}
                   <div className="divide-y divide-border rounded-md border border-border bg-background text-xs">
                     {slikAnalyses.map((item) => (
                       <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 p-2.5">
@@ -886,6 +1054,18 @@ export function CreditApplicationDetailClientView({
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Badge variant={slikRekomendasiVariant(item.rekomendasi)}>{item.rekomendasi}</Badge>
                           {item.riskRating && <Badge variant="outline">{item.riskRating}</Badge>}
+                          {slikVerifications.some((v) => v.slikAnalysisRecordId === item.id) && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] text-emerald-700"
+                              title={
+                                slikVerifications.find((v) => v.slikAnalysisRecordId === item.id)
+                                  ?.verifiedByName
+                              }
+                            >
+                              Terverifikasi
+                            </Badge>
+                          )}
                           <Link
                             href={`/credit/slik-analyzer?customerId=${app.customer?.id ?? ""}&applicationId=${app.id}&view=${item.id}`}
                           >
@@ -912,6 +1092,59 @@ export function CreditApplicationDetailClientView({
                     ))}
                   </div>
                 </>
+              )}
+              {slikVerifications.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Riwayat Verifikasi Angka (AI → Petugas)
+                  </p>
+                  <div className="divide-y divide-border rounded-md border border-border bg-background text-xs">
+                    {slikVerifications.map((item) => {
+                      const corrections = detectCorrections(
+                        {
+                          bakiDebet: item.aiBakiDebet ?? null,
+                          tunggakan: item.aiTunggakan ?? null,
+                          kolektibilitas: item.aiKolektibilitas ?? null,
+                        },
+                        {
+                          bakiDebet: item.confirmedBakiDebet ?? null,
+                          tunggakan: item.confirmedTunggakan ?? null,
+                          kolektibilitas: item.confirmedKolektibilitas ?? null,
+                        }
+                      );
+                      return (
+                        <div key={item.id} className="p-2.5">
+                          <p className="flex flex-wrap items-center gap-1.5 font-medium">
+                            {new Date(item.verifiedAt).toLocaleString("id-ID")} · {item.verifiedByName}
+                            <Badge
+                              variant={corrections.length ? "warning" : "outline"}
+                              className="text-[10px]"
+                            >
+                              {corrections.length ? `${corrections.length} koreksi` : "Sesuai dokumen"}
+                            </Badge>
+                          </p>
+                          <p className="mt-1 leading-relaxed text-muted-foreground">
+                            Konfirmasi — baki debet {formatRupiah(item.confirmedBakiDebet ?? 0)}, tunggakan{" "}
+                            {formatRupiah(item.confirmedTunggakan ?? 0)}, kolektibilitas{" "}
+                            {item.confirmedKolektibilitas || "-"}
+                          </p>
+                          {corrections.length > 0 && (
+                            <p className="mt-1 leading-relaxed text-amber-700 dark:text-amber-400">
+                              {corrections
+                                .map((c) => `${FIGURE_FIELD_LABELS[c.field]}: ${c.from} → ${c.to}`)
+                                .join(" · ")}
+                            </p>
+                          )}
+                          {item.note && (
+                            <p className="mt-1 italic leading-relaxed text-muted-foreground">
+                              Catatan: {item.note}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
               {slikOverrides.length > 0 && (
                 <div className="space-y-1.5">
@@ -1700,6 +1933,128 @@ export function CreditApplicationDetailClientView({
             </Button>
             <Button type="button" onClick={() => void confirmOverride()} className="gap-2">
               <CheckCircle2 className="h-4 w-4" /> Teruskan &amp; Simpan Alasan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Tahap 5B: dialog verifikasi manual angka ekstraksi AI */}
+      <Dialog
+        open={verifyDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setVerifyDialogOpen(false);
+            setVerifyError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary" /> Verifikasi Manual Angka SLIK
+            </DialogTitle>
+            <DialogDescription>
+              Bandingkan angka hasil ekstraksi AI di bawah dengan dokumen SLIK asli, lalu koreksi bila
+              berbeda. Nilai AI tetap tersimpan sebagai pembanding — setiap koreksi dicatat berjejak dan
+              masuk audit log.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="verify-baki-debet" className="text-xs font-semibold">
+                  Total Baki Debet (Rp)
+                </label>
+                <input
+                  id="verify-baki-debet"
+                  type="number"
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
+                  value={verifyForm.bakiDebet}
+                  onChange={(event) => {
+                    setVerifyForm({ ...verifyForm, bakiDebet: event.target.value });
+                    setVerifyError(null);
+                  }}
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor="verify-tunggakan" className="text-xs font-semibold">
+                  Total Tunggakan (Rp)
+                </label>
+                <input
+                  id="verify-tunggakan"
+                  type="number"
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
+                  value={verifyForm.tunggakan}
+                  onChange={(event) => {
+                    setVerifyForm({ ...verifyForm, tunggakan: event.target.value });
+                    setVerifyError(null);
+                  }}
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="verify-kolektibilitas" className="text-xs font-semibold">
+                Kolektibilitas / Kualitas Terburuk
+              </label>
+              <input
+                id="verify-kolektibilitas"
+                type="text"
+                maxLength={100}
+                value={verifyForm.kolektibilitas}
+                onChange={(event) => {
+                  setVerifyForm({ ...verifyForm, kolektibilitas: event.target.value });
+                  setVerifyError(null);
+                }}
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label htmlFor="verify-note" className="text-xs font-semibold">
+                Catatan verifikasi (opsional)
+              </label>
+              <textarea
+                id="verify-note"
+                rows={2}
+                maxLength={1000}
+                value={verifyForm.note}
+                onChange={(event) => {
+                  setVerifyForm({ ...verifyForm, note: event.target.value });
+                  setVerifyError(null);
+                }}
+                placeholder="Contoh: kolom baki debet halaman 2 PDF berbeda dengan hasil ekstraksi karena tabel terpotong."
+                className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
+              />
+            </div>
+            {verifyError && <p className="text-xs text-destructive">{verifyError}</p>}
+            <p className="text-[11px] text-muted-foreground">
+              Nilai awal = hasil AI. Ubah hanya bila dokumen asli berbeda — setiap perbedaan tercatat
+              sebagai koreksi.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setVerifyDialogOpen(false);
+                setVerifyError(null);
+              }}
+            >
+              Batal
+            </Button>
+            <Button type="button" onClick={() => void confirmVerify()} disabled={isVerifying} className="gap-2">
+              {isVerifying ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="h-4 w-4" />
+              )}
+              {isVerifying ? "Menyimpan..." : "Simpan Verifikasi"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -212,12 +212,37 @@ export default async function CreditApplicationDetailPage({
       : null,
   };
 
+  // Tahap 5B (P0.5): verifikasi manual angka ekstraksi AI — terbaru per analisa
+  // (diambil descending sehingga kemunculan pertama = verifikasi terakhir).
+  const slikVerifications = await db.slikAnalysisVerification.findMany({
+    where: {
+      organizationId: currentUser.organizationId,
+      slikAnalysisRecordId: { in: slikRecords.map((record) => record.id) },
+    },
+    select: {
+      id: true,
+      slikAnalysisRecordId: true,
+      aiBakiDebet: true,
+      aiTunggakan: true,
+      aiKolektibilitas: true,
+      confirmedBakiDebet: true,
+      confirmedTunggakan: true,
+      confirmedKolektibilitas: true,
+      note: true,
+      verifiedByName: true,
+      verifiedAt: true,
+    },
+    orderBy: { verifiedAt: "desc" },
+    take: 100,
+  });
+
   return (
     <CreditApplicationDetailClientView
       application={JSON.parse(JSON.stringify(application))}
       users={users}
       initialDocuments={JSON.parse(JSON.stringify(documents.map(toDocumentDto)))}
       initialSlikAnalyses={JSON.parse(JSON.stringify(slikSummaries))}
+      initialSlikVerifications={JSON.parse(JSON.stringify(slikVerifications))}
       slikGate={JSON.parse(JSON.stringify(slikGate))}
       slikOverrides={JSON.parse(JSON.stringify(slikOverrides))}
     />

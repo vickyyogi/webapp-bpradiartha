@@ -152,6 +152,33 @@ export async function PUT(
       if (err) return NextResponse.json({ error: err, code: "ASSIGNEE_FORBIDDEN" }, { status: 403 });
     }
 
+    // Tahap 5B (P0.5): angka ekstraksi AI (baki debet, tunggakan,
+    // kolektibilitas) wajib diverifikasi manual terhadap dokumen SLIK asli
+    // sebelum dipakai dalam Analisis 5C.
+    if (analysisData !== undefined) {
+      const latestSlik = await db.slikAnalysisRecord.findFirst({
+        where: { organizationId: currentUser.organizationId, customerId: existing.customerId },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+      if (latestSlik) {
+        const verified = await db.slikAnalysisVerification.findFirst({
+          where: { slikAnalysisRecordId: latestSlik.id },
+          select: { id: true },
+        });
+        if (!verified) {
+          return NextResponse.json(
+            {
+              error:
+                "Analisa SLIK terakhir belum diverifikasi manual. Verifikasi angka baki debet, tunggakan, dan kolektibilitas terhadap dokumen asli (panel Hasil Analisa SLIK) sebelum menyimpan Analisis 5C.",
+              code: "SLIK_VERIFICATION_REQUIRED",
+            },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const updateData: Prisma.CreditApplicationUncheckedUpdateInput = {};
     if (product !== undefined) updateData.product = product;
     if (requestedAmount !== undefined) updateData.requestedAmount = requestedAmount ? parseFloat(requestedAmount) : null;
