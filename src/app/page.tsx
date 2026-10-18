@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { PublicHeader } from "@/components/public/PublicHeader";
 import { PublicFooter } from "@/components/public/PublicFooter";
+import FloatingMenu from "@/components/public/FloatingMenu";
 
 function getProductIcon(iconName?: string | null, category?: string | null) {
   switch (iconName) {
@@ -271,6 +272,9 @@ export default function PublicLandingPage() {
     <div className="min-h-screen flex flex-col bg-lp-bg text-lp-text">
       {/* Main Header / Navigation */}
       <PublicHeader />
+
+      {/* Floating quick-nav rail (landing page only) */}
+      <FloatingMenu />
 
       {/* ============================= HERO ============================= */}
       <section id="beranda" className="lp-hero-bg relative isolate overflow-hidden scroll-mt-28">

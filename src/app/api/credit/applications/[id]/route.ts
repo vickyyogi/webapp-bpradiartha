@@ -5,6 +5,14 @@ import { db } from "@/lib/db";
 import { Prisma, CreditApplicationStatus } from "@prisma/client";
 import { requireAuthAndPermission } from "@/lib/permissions";
 import { buildScopeFilter, isBranchAllowed, toScopeUser, violatesSegregationOfDuties } from "@/lib/access-scope";
+import { extractClientInfo, logAudit } from "@/lib/audit";
+import {
+  isContinuationStatus,
+  isValidOverrideReason,
+  OVERRIDE_REASON_MIN_LENGTH,
+  overrideRoleLabel,
+  resolveOverrideActor,
+} from "@/lib/slik/override";
 import { CREDIT_ASSIGNMENT_FIELDS } from "../route";
 
 const DECISION_STATUSES: CreditApplicationStatus[] = [
@@ -170,8 +178,79 @@ export async function PUT(
       status && status !== existing.status && Object.values(CreditApplicationStatus).includes(status as CreditApplicationStatus);
 
     let approverRoleTitle = "Pejabat Pemutus";
+    let slikOverrideNote = "";
 
     if (isStatusChanged) {
+      // Tahap 5B (P0.5): bila rekomendasi analisa AI terbaru = REJECT dan
+      // pengajuan tetap DITERUSKAN, alasan penerusan wajib diisi oleh Account
+      // Officer atau petugas survei lapangan — diverifikasi & dicatat di server.
+      if (isContinuationStatus(status)) {
+        const latestSlik = await db.slikAnalysisRecord.findFirst({
+          where: { organizationId: currentUser.organizationId, customerId: existing.customerId },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, rekomendasi: true },
+        });
+
+        if (latestSlik && latestSlik.rekomendasi === "REJECT") {
+          const coveringOverride = await db.creditSlikOverride.findFirst({
+            where: { creditApplicationId: id, slikAnalysisRecordId: latestSlik.id },
+            select: { id: true },
+          });
+
+          if (!coveringOverride) {
+            const actorRole = resolveOverrideActor(currentUser, existing);
+            if (!actorRole) {
+              return NextResponse.json(
+                {
+                  error:
+                    "Analisa SLIK terakhir merekomendasikan REJECT. Hanya Account Officer atau petugas survei lapangan yang dapat mengisi alasan penerusan pengajuan.",
+                  code: "SLIK_OVERRIDE_FORBIDDEN",
+                },
+                { status: 403 }
+              );
+            }
+            if (!isValidOverrideReason(body.slikOverrideReason)) {
+              return NextResponse.json(
+                {
+                  error: `Analisa SLIK terakhir merekomendasikan REJECT. Isi alasan penerusan pengajuan (minimal ${OVERRIDE_REASON_MIN_LENGTH} karakter) sebelum melanjutkan.`,
+                  code: "SLIK_OVERRIDE_REQUIRED",
+                },
+                { status: 400 }
+              );
+            }
+
+            const reason = body.slikOverrideReason.trim();
+            await db.creditSlikOverride.create({
+              data: {
+                organizationId: currentUser.organizationId,
+                creditApplicationId: id,
+                slikAnalysisRecordId: latestSlik.id,
+                rekomendasi: "REJECT",
+                reason,
+                recordedById: currentUser.id,
+                recordedByName: currentUser.fullName,
+                recordedByRole: actorRole,
+              },
+            });
+
+            const { ipAddress, userAgent } = extractClientInfo(req);
+            await logAudit({
+              organizationId: currentUser.organizationId,
+              userId: currentUser.id,
+              action: "SLIK_OVERRIDE",
+              entityType: "CREDIT_APPLICATION",
+              entityId: id,
+              newValues: { slikAnalysisRecordId: latestSlik.id, rekomendasi: "REJECT", reason, role: actorRole },
+              notes: "Alasan penerusan pengajuan meski rekomendasi analisa SLIK AI = REJECT.",
+              ipAddress,
+              userAgent,
+            });
+
+            slikOverrideNote = `Diteruskan meski rekomendasi AI REJECT — alasan ${overrideRoleLabel(actorRole)} (${currentUser.fullName}): ${reason}`;
+          }
+        }
+      }
+
       updateData.status = status as CreditApplicationStatus;
 
       if (status === "APPROVED" || status === "REJECTED" || status === "DECISION") {
@@ -259,7 +338,9 @@ export async function PUT(
                 create: {
                   status: status as CreditApplicationStatus,
                   changedById: currentUser.id,
-                  notes: statusChangeNote || `Perubahan status menjadi ${status}.`,
+                  notes: [statusChangeNote || `Perubahan status menjadi ${status}.`, slikOverrideNote]
+                    .filter(Boolean)
+                    .join(" | "),
                 },
               },
             }

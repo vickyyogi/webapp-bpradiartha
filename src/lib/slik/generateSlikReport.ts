@@ -185,8 +185,10 @@ function drawCoverHeader(doc: PdfDoc, data: SlikAnalysis) {
     year: "numeric",
   });
   const meta = [
+    `Nomor Laporan: ${data.header.nomor_laporan}`,
     `Tanggal Cetak: ${tanggalCetak}`,
-    `Posisi Data: ${data.header.posisi_data}`
+    `Posisi Data: ${data.header.posisi_data}`,
+    `Operator: ${data.header.operator}`
   ].join("  |  ");
   doc.text(meta, MARGIN_X, 26);
 

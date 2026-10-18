@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -20,6 +20,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   CircleDot,
+  LifeBuoy,
 } from "lucide-react";
 import type { NavSectionConfig } from "@/lib/navigation";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,22 @@ interface Props {
   children: React.ReactNode;
 }
 
+function initialsOf(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+// Preferensi sidebar dibaca dari localStorage lewat useSyncExternalStore:
+// aman untuk hidrasi server dan tidak memerlukan efek sinkronisasi.
+const subscribeNoop = () => () => {};
+const getSidebarPref = () => localStorage.getItem("bpr_sidebar_open");
+const getSidebarPrefServer = () => null;
+
 export function DashboardShell({
   userName,
   userRoleLabel,
@@ -55,20 +72,15 @@ export function DashboardShell({
   children,
 }: Props) {
   const pathname = usePathname();
-  const [isOpen, setIsOpen] = useState(true);
+  const savedSidebarPref = useSyncExternalStore(subscribeNoop, getSidebarPref, getSidebarPrefServer);
+  const [sidebarOverride, setSidebarOverride] = useState<boolean | null>(null);
+  // Prefer tersimpan: "false" = tertutup; selain itu (termasuk belum ada) = terbuka.
+  const isOpen = sidebarOverride ?? savedSidebarPref !== "false";
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-
-  // Read sidebar preference from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem("bpr_sidebar_open");
-    if (saved !== null) {
-      setIsOpen(saved === "true");
-    }
-  }, []);
 
   const toggleSidebar = () => {
     const nextState = !isOpen;
-    setIsOpen(nextState);
+    setSidebarOverride(nextState);
     localStorage.setItem("bpr_sidebar_open", String(nextState));
   };
 
@@ -76,28 +88,16 @@ export function DashboardShell({
     setIsMobileOpen((prev) => !prev);
   };
 
-  // Toggle Dropdowns State
-  const [openDropdowns, setOpenDropdowns] = useState<Record<string, boolean>>({});
+  // State dropdown: hanya override dari pengguna; default terbuka saat modulnya aktif.
+  const [dropdownOverrides, setDropdownOverrides] = useState<Record<string, boolean>>({});
 
-  // Automatically expand dropdown for current active route
-  useEffect(() => {
-    setOpenDropdowns((prev) => {
-      const next = { ...prev };
-      for (const section of navSections) {
-        for (const item of section.items) {
-          if (item.type === "dropdown" && item.basePath && pathname.startsWith(item.basePath)) {
-            next[item.key] = true;
-          }
-        }
-      }
-      return next;
-    });
-  }, [pathname, navSections]);
+  const isDropdownOpenFor = (item: NavSectionConfig["items"][number]) =>
+    dropdownOverrides[item.key] ?? isModuleActive(item.basePath || "/");
 
-  const toggleDropdown = (key: string) => {
-    setOpenDropdowns((prev) => ({
+  const toggleDropdown = (key: string, currentlyOpen: boolean) => {
+    setDropdownOverrides((prev) => ({
       ...prev,
-      [key]: !prev[key],
+      [key]: !currentlyOpen,
     }));
   };
 
@@ -116,15 +116,15 @@ export function DashboardShell({
           key={item.key}
           href={href}
           onClick={onNavigate}
-          className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all group ${
+          className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors group ${
             active
-              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-              : "text-foreground/75 hover:bg-primary-soft hover:text-primary"
+              ? "bg-lp-accent text-lp-on-accent font-semibold shadow-[0_10px_22px_-12px_var(--lp-glow-lime)]"
+              : "text-lp-muted hover:bg-lp-brand-soft hover:text-lp-brand"
           }`}
         >
           <Icon
             className={`h-4 w-4 shrink-0 transition-colors ${
-              active ? "text-primary-foreground" : "text-muted-foreground group-hover:text-primary"
+              active ? "text-lp-on-accent" : "text-lp-muted/80 group-hover:text-lp-brand"
             }`}
           />
           <span className="truncate">{item.title}</span>
@@ -134,7 +134,7 @@ export function DashboardShell({
 
     const basePath = item.basePath || "/";
     const isParentActive = isModuleActive(basePath);
-    const isDropdownOpen = !!openDropdowns[item.key];
+    const isDropdownOpen = isDropdownOpenFor(item);
     const children = item.children ?? [];
 
     if (children.length === 0) return null;
@@ -143,30 +143,34 @@ export function DashboardShell({
       <div key={item.key} className="space-y-1">
         <button
           type="button"
-          onClick={() => toggleDropdown(item.key)}
-          className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium transition-all cursor-pointer select-none group ${
+          onClick={() => toggleDropdown(item.key, isDropdownOpen)}
+          className={`w-full flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-colors cursor-pointer select-none group ${
             isParentActive
-              ? "bg-primary-soft text-primary font-bold border border-primary/20"
-              : "text-foreground/75 hover:bg-primary-soft hover:text-primary"
+              ? "bg-lp-accent text-lp-on-accent font-semibold shadow-[0_10px_22px_-12px_var(--lp-glow-lime)]"
+              : "text-lp-muted hover:bg-lp-brand-soft hover:text-lp-brand"
           }`}
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <Icon
               className={`h-4 w-4 shrink-0 transition-colors ${
-                isParentActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"
+                isParentActive ? "text-lp-on-accent" : "text-lp-muted/80 group-hover:text-lp-brand"
               }`}
             />
             <span className="truncate">{item.title}</span>
           </div>
           <ChevronDown
             className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${
-              isDropdownOpen ? "rotate-180 text-primary" : "text-muted-foreground group-hover:text-primary"
+              isDropdownOpen
+                ? `rotate-180 ${isParentActive ? "text-lp-on-accent" : "text-lp-brand"}`
+                : isParentActive
+                  ? "text-lp-on-accent"
+                  : "text-lp-muted/80 group-hover:text-lp-brand"
             }`}
           />
         </button>
 
         {isDropdownOpen && (
-          <div className="relative pl-3 ml-3 my-1 space-y-0.5 border-l-2 border-border/60 animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="relative pl-3 ml-3 my-1 space-y-0.5 border-l-2 border-lp-border animate-in fade-in slide-in-from-top-1 duration-150">
             {children.map((child) => {
               const isChildActive = pathname === child.href;
               return (
@@ -174,15 +178,15 @@ export function DashboardShell({
                   key={child.key}
                   href={child.href}
                   onClick={onNavigate}
-                  className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-all ${
+                  className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${
                     isChildActive
-                      ? "text-primary font-bold bg-primary-soft border-l-2 border-primary -ml-[14px] pl-[20px]"
-                      : "text-muted-foreground hover:text-primary hover:bg-primary-soft/50"
+                      ? "bg-lp-brand-soft text-lp-brand font-semibold"
+                      : "text-lp-muted hover:text-lp-brand hover:bg-lp-brand-soft/50"
                   }`}
                 >
                   <CircleDot
                     className={`h-1.5 w-1.5 shrink-0 ${
-                      isChildActive ? "text-primary" : "text-muted-foreground/40"
+                      isChildActive ? "text-lp-accent" : "text-lp-muted/40"
                     }`}
                   />
                   <span className="truncate">{child.title}</span>
@@ -195,73 +199,57 @@ export function DashboardShell({
     );
   };
 
+  const brandMark = (
+    <div className="flex items-center gap-2.5">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lp-brand text-lp-on-brand text-sm font-black shadow-[0_10px_22px_-12px_var(--lp-glow-violet)]">
+        A
+      </div>
+      <div className="flex flex-col">
+        <span className="text-base font-bold leading-tight text-lp-text">BPR Adiartha</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-lp-muted">
+          Sistem Operasional
+        </span>
+      </div>
+    </div>
+  );
+
+  const helpCard = (
+    <div className="m-3 rounded-2xl border border-lp-border bg-lp-card-2 p-4">
+      <div className="flex items-center gap-2">
+        <span className="lp-circle lp-circle-dark h-8 w-8">
+          <LifeBuoy className="h-4 w-4" />
+        </span>
+        <p className="text-xs font-semibold text-lp-text">Butuh bantuan?</p>
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-lp-muted">
+        Jangan ragu menghubungi tim TI untuk dukungan operasional Anda.
+      </p>
+      <a
+        href="mailto:support@bpradiartha.com"
+        className="lp-btn lp-btn-accent mt-3 w-full py-2 text-xs"
+      >
+        Hubungi Support
+      </a>
+    </div>
+  );
+
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 flex h-16 items-center gap-3 border-b border-border bg-background/95 backdrop-blur px-4 md:px-6 shadow-2xs">
-        {/* Toggle Button for Desktop */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleSidebar}
-          title={isOpen ? "Tutup Sidebar Menu" : "Buka Sidebar Menu"}
-          className="hidden md:flex text-muted-foreground hover:text-primary hover:bg-primary-soft cursor-pointer"
-        >
-          {isOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
-        </Button>
-
-        {/* Toggle Button for Mobile */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleMobileSidebar}
-          className="md:hidden text-muted-foreground hover:text-primary hover:bg-primary-soft cursor-pointer"
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
-
-        {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2.5 font-bold tracking-tight">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-white font-black text-sm shadow-xs border border-gold/40">
-            A
-          </div>
-          <div className="flex flex-col">
-            <span className="text-base font-bold text-foreground leading-tight">BPR Adiartha</span>
-            <span className="text-[10px] font-semibold text-gold-dark uppercase tracking-wider">
-              Sistem Operasional
-            </span>
-          </div>
-        </Link>
-
-        {/* Header Right Actions */}
-        <div className="ml-auto flex items-center gap-3">
-          <ThemeToggle />
-          <NotificationBell />
-          <Link
-            href="/account/password"
-            title="Keamanan akun: ganti kata sandi & keluar dari semua perangkat"
-            className="hidden sm:flex flex-col items-end rounded-md px-2 py-1 hover:bg-primary-soft transition-colors"
-          >
-            <span className="text-sm font-semibold leading-none text-foreground">{userName}</span>
-            <span className="text-[11px] font-medium text-gold-dark bg-gold-soft px-1.5 py-0.5 rounded mt-1 border border-gold/30">
-              {userRoleLabel}
-            </span>
+    <div className="flex min-h-screen bg-lp-bg text-lp-text">
+      {/* Desktop Sidebar — panel kartu ala referensi */}
+      <aside
+        className={`hidden md:flex shrink-0 flex-col border-r border-lp-border bg-lp-card transition-all duration-300 ease-in-out select-none ${
+          isOpen ? "w-64" : "w-0 overflow-hidden border-r-0"
+        }`}
+      >
+        <div className="flex h-full w-64 flex-col">
+          <Link href="/dashboard" className="px-5 py-5">
+            {brandMark}
           </Link>
-          <LogoutButton />
-        </div>
-      </header>
 
-      <div className="flex flex-1 relative overflow-hidden">
-        {/* Desktop Sidebar */}
-        <aside
-          className={`hidden md:block border-r border-border bg-background transition-all duration-300 ease-in-out select-none ${
-            isOpen ? "w-64" : "w-0 border-r-0 opacity-0 pointer-events-none"
-          }`}
-        >
-          <div className="w-64 h-full overflow-y-auto p-3 space-y-4">
+          <div className="flex-1 overflow-y-auto px-3 space-y-4">
             {navSections.map((section) => (
               <div key={section.label} className="space-y-1">
-                <div className="px-3 pt-2 pb-1 text-[10px] font-bold tracking-wider text-muted-foreground/70 uppercase">
+                <div className="px-3 pt-2 pb-1 text-[10px] font-bold tracking-[0.12em] text-lp-muted/70 uppercase">
                   {section.label}
                 </div>
                 <nav className="grid gap-1">
@@ -270,55 +258,115 @@ export function DashboardShell({
               </div>
             ))}
           </div>
-        </aside>
 
-        {/* Mobile Drawer Overlay */}
-        {isMobileOpen && (
-          <div className="md:hidden fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex">
-            <div className="w-72 bg-background border-r border-border h-full overflow-y-auto p-4 flex flex-col shadow-xl">
-              <div className="flex items-center justify-between pb-4 mb-2 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center text-white font-black text-xs shadow-xs border border-gold/40">
-                    A
-                  </div>
-                  <span className="font-bold text-foreground text-base">BPR Adiartha</span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleMobileSidebar}
-                  className="hover:bg-primary-soft hover:text-primary cursor-pointer"
-                >
-                  <X className="h-5 w-5" />
-                </Button>
-              </div>
+          {helpCard}
+        </div>
+      </aside>
 
-              <div className="text-xs bg-primary-soft/60 border border-primary/10 p-2.5 rounded-lg mb-3">
-                <div className="font-semibold text-foreground">{userName}</div>
-                <div className="text-[11px] font-medium text-gold-dark mt-0.5">{userRoleLabel}</div>
-              </div>
+      {/* Mobile Drawer Overlay */}
+      {isMobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div className="flex h-full w-72 flex-col bg-lp-card border-r border-lp-border shadow-xl">
+            <div className="flex items-center justify-between px-4 py-4">
+              <Link href="/dashboard" onClick={() => setIsMobileOpen(false)}>
+                {brandMark}
+              </Link>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleMobileSidebar}
+                className="text-lp-muted hover:text-lp-brand hover:bg-lp-brand-soft cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
 
-              <div className="space-y-4 flex-1">
-                {navSections.map((section) => (
-                  <div key={section.label} className="space-y-1">
-                    <div className="px-3 pt-2 pb-1 text-[10px] font-bold tracking-wider text-muted-foreground/70 uppercase">
-                      {section.label}
-                    </div>
-                    <nav className="grid gap-1">
-                      {section.items.map((item) =>
-                        renderNavItem(item, () => setIsMobileOpen(false))
-                      )}
-                    </nav>
-                  </div>
-                ))}
+            <div className="mx-3 mb-3 flex items-center gap-2.5 rounded-2xl border border-lp-border bg-lp-card-2 p-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lp-brand text-lp-on-brand text-xs font-bold">
+                {initialsOf(userName)}
+              </span>
+              <div className="min-w-0">
+                <div className="truncate text-xs font-semibold text-lp-text">{userName}</div>
+                <div className="truncate text-[11px] text-lp-muted">{userRoleLabel}</div>
               </div>
             </div>
-            <div className="flex-1" onClick={toggleMobileSidebar} />
+
+            <div className="flex-1 overflow-y-auto px-3 space-y-4">
+              {navSections.map((section) => (
+                <div key={section.label} className="space-y-1">
+                  <div className="px-3 pt-2 pb-1 text-[10px] font-bold tracking-[0.12em] text-lp-muted/70 uppercase">
+                    {section.label}
+                  </div>
+                  <nav className="grid gap-1">
+                    {section.items.map((item) =>
+                      renderNavItem(item, () => setIsMobileOpen(false))
+                    )}
+                  </nav>
+                </div>
+              ))}
+            </div>
           </div>
-        )}
+          <div className="flex-1 bg-lp-band/40 backdrop-blur-sm" onClick={toggleMobileSidebar} />
+        </div>
+      )}
+
+      {/* Content Column */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Topbar */}
+        <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-lp-border bg-lp-bg/90 px-4 backdrop-blur-md md:px-6">
+          {/* Toggle Button for Desktop */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            title={isOpen ? "Tutup Sidebar Menu" : "Buka Sidebar Menu"}
+            className="hidden md:flex text-lp-muted hover:text-lp-brand hover:bg-lp-brand-soft cursor-pointer"
+          >
+            {isOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
+          </Button>
+
+          {/* Toggle Button for Mobile */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleMobileSidebar}
+            className="md:hidden text-lp-muted hover:text-lp-brand hover:bg-lp-brand-soft cursor-pointer"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+
+          {/* Logo (mobile) */}
+          <Link href="/dashboard" className="md:hidden">
+            {brandMark}
+          </Link>
+
+          {/* Header Right Actions */}
+          <div className="ml-auto flex items-center gap-1.5 md:gap-2">
+            <ThemeToggle />
+            <NotificationBell />
+            <Link
+              href="/account/password"
+              title="Keamanan akun: ganti kata sandi & keluar dari semua perangkat"
+              className="hidden sm:flex items-center gap-2.5 rounded-full border border-lp-border bg-lp-card px-2.5 py-1.5 transition-colors hover:border-lp-brand/40"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-lp-brand text-lp-on-brand text-xs font-bold">
+                {initialsOf(userName)}
+              </span>
+              <span className="flex flex-col items-start">
+                <span className="max-w-[160px] truncate text-xs font-semibold leading-tight text-lp-text">
+                  {userName}
+                </span>
+                <span className="max-w-[160px] truncate text-[10px] font-medium text-lp-muted">
+                  {userRoleLabel}
+                </span>
+              </span>
+            </Link>
+            <LogoutButton />
+          </div>
+        </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">{children}</main>
+        <main className="flex-1 p-4 md:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

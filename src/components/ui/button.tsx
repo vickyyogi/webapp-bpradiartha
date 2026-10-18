@@ -13,7 +13,7 @@ const buttonVariants = cva(
         secondary:
           "border border-primary/20 bg-background text-primary hover:bg-primary-soft hover:border-primary/40 aria-expanded:bg-primary-soft aria-expanded:text-primary",
         gold:
-          "bg-gold text-white hover:bg-gold-dark shadow-xs font-semibold",
+          "bg-gold text-lp-on-accent hover:brightness-95 shadow-xs font-semibold",
         ghost:
           "hover:bg-primary-soft hover:text-primary aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:

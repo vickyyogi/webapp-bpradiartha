@@ -8,6 +8,7 @@ import {
   Download,
   Eye,
   FileText,
+  History,
   Info,
   Loader2,
   RefreshCw,
@@ -39,6 +40,14 @@ interface Props {
   apiConfigured: boolean;
   defaultModel: string;
   fallbackModel: string;
+  /** Tahap 5: konteks pipeline — debitur terpilih dari halaman pengajuan kredit. */
+  initialCustomerId?: string;
+  /** Tahap 5: pengajuan kredit yang akan dikaitkan ke hasil analisa. */
+  creditApplicationId?: string;
+  /** Label konteks untuk ditampilkan (mis. "Pengajuan APP-... — Nama"). */
+  contextLabel?: string;
+  /** Tahap 5: muat hasil tersimpan tertentu ke pratinjau saat halaman dibuka. */
+  initialViewRecordId?: string;
 }
 
 type Phase = "idle" | "analyzing" | "ready" | "error";
@@ -67,6 +76,29 @@ interface SlikFileStatus {
   truncated: boolean;
   status: "analyzed" | "skipped" | "failed";
   reason?: string;
+}
+
+/** Debitur terdaftar pada pengajuan kredit (pilihan wajib sebelum analisa). */
+interface SlikDebtor {
+  id: string;
+  customerNumber: string;
+  legalName: string;
+  customerType: string;
+}
+
+/** Ringkasan satu hasil analisa tersimpan (riwayat). */
+interface SlikHistoryItem {
+  id: string;
+  customerId: string;
+  creditApplicationId: string | null;
+  customerName: string;
+  sourceFileNames: string[] | null;
+  mode: string;
+  rekomendasi: string;
+  riskRating: string | null;
+  modelUsed: string | null;
+  createdAt: string;
+  createdBy?: { id: string; fullName: string } | null;
 }
 
 const MODE_OPTIONS: Array<{ value: AnalyzeMode; title: string; description: string }> = [
@@ -104,6 +136,10 @@ export function SlikAnalyzerClientView({
   apiConfigured,
   defaultModel,
   fallbackModel,
+  initialCustomerId = "",
+  creditApplicationId = "",
+  contextLabel = "",
+  initialViewRecordId = "",
 }: Props) {
   const [files, setFiles] = useState<File[]>([]);
   const [mode, setMode] = useState<AnalyzeMode>("per-file");
@@ -121,6 +157,65 @@ export function SlikAnalyzerClientView({
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+
+  // Tahap 5A (P0.5): pilihan debitur wajib + riwayat hasil tersimpan.
+  const [debtors, setDebtors] = useState<SlikDebtor[]>([]);
+  const [debtorsLoading, setDebtorsLoading] = useState(true);
+  const [debtorSearch, setDebtorSearch] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState(initialCustomerId);
+  const [history, setHistory] = useState<SlikHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [busyRecordId, setBusyRecordId] = useState<string | null>(null);
+
+  const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const res = await fetch("/api/slik/analyses");
+      const payload = (await res.json().catch(() => null)) as {
+        success?: boolean;
+        analyses?: SlikHistoryItem[];
+        error?: string;
+      };
+      if (!res.ok || !payload?.success) {
+        throw new Error(payload?.error || "Gagal memuat riwayat analisa.");
+      }
+      setHistory(payload.analyses ?? []);
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "Gagal memuat riwayat analisa.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/slik/debtors");
+        const payload = (await res.json().catch(() => null)) as {
+          success?: boolean;
+          debtors?: SlikDebtor[];
+        };
+        if (!cancelled && res.ok && payload?.success) {
+          setDebtors(payload.debtors ?? []);
+        }
+      } catch {
+        // Dibiarkan kosong; pengguna dapat memuat ulang halaman.
+      } finally {
+        if (!cancelled) setDebtorsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Dijalankan sebagai callback promise — bukan setState sinkron di badan efek.
+    void Promise.resolve().then(refreshHistory);
+  }, [refreshHistory]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -184,6 +279,12 @@ export function SlikAnalyzerClientView({
 
   const runAnalysis = async () => {
     if (files.length === 0) return;
+    if (!selectedCustomerId) {
+      setErrorMessage(
+        "Pilih data debitur yang terdaftar pada pengajuan kredit terlebih dahulu. Hasil analisa akan disimpan ke debitur tersebut."
+      );
+      return;
+    }
     setElapsed(0);
     setPhase("analyzing");
     setErrorMessage(null);
@@ -199,6 +300,8 @@ export function SlikAnalyzerClientView({
       const formData = new FormData();
       files.forEach((file) => formData.append("files", file));
       formData.append("mode", mode);
+      formData.append("customerId", selectedCustomerId);
+      if (creditApplicationId) formData.append("creditApplicationId", creditApplicationId);
 
       const response = await fetch("/api/analyze-slik", { method: "POST", body: formData });
       const payload = await response.json().catch(() => null);
@@ -213,6 +316,9 @@ export function SlikAnalyzerClientView({
       setMeta(resultMeta);
       setWarnings(resultMeta?.warnings ?? []);
       setFileStatus(resultMeta?.files ?? []);
+
+      // Hasil sudah tersimpan di server — segarkan riwayat.
+      void refreshHistory();
 
       if (payload.mode === "merge") {
         setMergeAnalysis(payload.data as SlikAnalysis);
@@ -303,6 +409,95 @@ export function SlikAnalyzerClientView({
     }
   };
 
+  /** Lihat ulang hasil analisa tersimpan: muat ke pratinjau seperti hasil baru. */
+  const viewHistoryItem = useCallback(async (recordId: string) => {
+    setBusyRecordId(recordId);
+    setErrorMessage(null);
+    try {
+      const res = await fetch(`/api/slik/analyses/${recordId}`);
+      const payload = (await res.json().catch(() => null)) as {
+        success?: boolean;
+        analysis?: { mode: string; sourceFileNames: string[] | null; result: SlikAnalysis };
+        error?: string;
+      };
+      if (!res.ok || !payload?.success || !payload.analysis) {
+        throw new Error(payload?.error || "Gagal memuat hasil analisa tersimpan.");
+      }
+
+      const saved = payload.analysis;
+      setFiles([]);
+      setFileStatus([]);
+      setWarnings([]);
+      setMeta(null);
+      setJsonError(null);
+      setActiveIndex(0);
+
+      if (saved.mode === "merge") {
+        setMode("merge");
+        setResults([]);
+        setMergeAnalysis(saved.result);
+      } else {
+        const fileName = saved.sourceFileNames?.[0] ?? "laporan-slik.pdf";
+        setMode("per-file");
+        setMergeAnalysis(null);
+        setResults([
+          {
+            fileName,
+            ok: true,
+            data: saved.result,
+            model: null,
+            warnings: [],
+            error: null,
+            elapsedMs: 0,
+            source: { fileName, pages: 0, chars: 0, truncated: false },
+          },
+        ]);
+      }
+
+      setJsonDraft(JSON.stringify(saved.result, null, 2));
+      setActiveTab("preview");
+      setPhase("ready");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Gagal memuat hasil analisa tersimpan.");
+    } finally {
+      setBusyRecordId(null);
+    }
+  }, []);
+
+  /** Unduh ulang laporan PDF dari hasil tersimpan (audit tercatat di server). */
+  const downloadHistoryItem = async (recordId: string) => {
+    setBusyRecordId(recordId);
+    setErrorMessage(null);
+    try {
+      const res = await fetch(`/api/slik/analyses/${recordId}/download`);
+      const payload = (await res.json().catch(() => null)) as {
+        success?: boolean;
+        data?: SlikAnalysis;
+        error?: string;
+      };
+      if (!res.ok || !payload?.success || !payload.data) {
+        throw new Error(payload?.error || "Gagal mengambil data hasil analisa tersimpan.");
+      }
+      const { downloadSlikReportPdf } = await import("@/lib/slik/generateSlikReport");
+      await downloadSlikReportPdf(payload.data);
+    } catch (error) {
+      setErrorMessage(
+        `Gagal menyusun ulang laporan PDF: ${error instanceof Error ? error.message : "kesalahan tak terduga"}.`
+      );
+    } finally {
+      setBusyRecordId(null);
+    }
+  };
+
+  // Pramuat konteks pipeline pengajuan kredit (Tahap 5): muat hasil tersimpan
+  // ke pratinjau bila halaman dibuka dengan ?view=<recordId>.
+  // (Debitur terpilih diinisialisasi langsung dari prop `initialCustomerId`.)
+  useEffect(() => {
+    if (!initialViewRecordId) return;
+    // Dijalankan sebagai callback promise — bukan setState sinkron di badan efek.
+    void Promise.resolve().then(() => viewHistoryItem(initialViewRecordId));
+  }, [initialViewRecordId, viewHistoryItem]);
+
   const resetAll = () => {
     setFiles([]);
     setMergeAnalysis(null);
@@ -318,6 +513,16 @@ export function SlikAnalyzerClientView({
   };
 
   const komite = analysis?.analisis_dan_rekomendasi.keputusan_komite;
+
+  // Daftar debitur untuk dropdown (difilter di sisi klien; data ≤ 300 baris).
+  const filteredDebtors = debtors.filter((debtor) => {
+    const query = debtorSearch.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      debtor.legalName.toLowerCase().includes(query) ||
+      debtor.customerNumber.toLowerCase().includes(query)
+    );
+  });
 
   return (
     <div className="space-y-6">
@@ -388,6 +593,30 @@ export function SlikAnalyzerClientView({
         </div>
       )}
 
+      {/* Tahap 5A (P0.5): penegasan status hasil AI — alat bantu, bukan keputusan final */}
+      <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary-soft/40 p-3">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          <span className="font-semibold text-foreground">
+            Hasil analisa ini dibuat oleh AI dan merupakan alat bantu analisis, bukan keputusan kredit final.
+          </span>{" "}
+          Angka baki debet, tunggakan, dan kolektibilitas wajib diverifikasi manual terhadap dokumen SLIK asli.
+          Keputusan kredit harus dicatat oleh pejabat berwenang beserta alasan/pertimbangannya.
+        </p>
+      </div>
+
+      {/* Tahap 5: konteks pipeline pengajuan kredit */}
+      {contextLabel && (
+        <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary-soft/20 p-3">
+          <ScanSearch className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground">Konteks pengajuan kredit: {contextLabel}.</span>{" "}
+            Hasil analisa akan otomatis dikaitkan ke pengajuan tersebut dan muncul pada tab Analisis
+            halaman detail pengajuan.
+          </p>
+        </div>
+      )}
+
       {/* Panel unggah + ringkasan proses */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -401,6 +630,47 @@ export function SlikAnalyzerClientView({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Tahap 5A (P0.5): pilih debitur terdaftar — wajib sebelum analisa */}
+            <div className="space-y-1.5">
+              <label htmlFor="slik-debitur" className="text-xs font-semibold text-foreground">
+                Debitur yang dianalisa <span className="text-destructive">*</span>
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Pilih nasabah yang terdaftar pada pengajuan kredit. Hasil analisa akan tersimpan
+                dan dihubungkan ke debitur ini agar dapat dilihat ulang dan diunduh ulang.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="search"
+                  value={debtorSearch}
+                  onChange={(event) => setDebtorSearch(event.target.value)}
+                  placeholder="Cari nama / nomor nasabah..."
+                  disabled={phase === "analyzing"}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:max-w-[220px]"
+                />
+                <select
+                  id="slik-debitur"
+                  value={selectedCustomerId}
+                  onChange={(event) => setSelectedCustomerId(event.target.value)}
+                  disabled={phase === "analyzing" || debtorsLoading}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">
+                    {debtorsLoading
+                      ? "Memuat daftar debitur..."
+                      : debtors.length === 0
+                        ? "Tidak ada debitur terdaftar pada pengajuan kredit"
+                        : "-- Pilih debitur --"}
+                  </option>
+                  {filteredDebtors.map((debtor) => (
+                    <option key={debtor.id} value={debtor.id}>
+                      {debtor.legalName} ({debtor.customerNumber})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div
               onDragOver={(event) => {
                 event.preventDefault();
@@ -515,7 +785,7 @@ export function SlikAnalyzerClientView({
               </p>
               <Button
                 onClick={runAnalysis}
-                disabled={files.length === 0 || phase === "analyzing"}
+                disabled={files.length === 0 || !selectedCustomerId || phase === "analyzing"}
                 className="gap-2"
               >
                 {phase === "analyzing" ? (
@@ -960,7 +1230,7 @@ export function SlikAnalyzerClientView({
                       }`}
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h3 className="text-sm font-bold">KEPUTUSAN KOMITE / ANALIS KREDIT</h3>
+                        <h3 className="text-sm font-bold">REKOMENDASI AI — ALAT BANTU ANALISIS</h3>
                         <div className="flex gap-2">
                           <Badge variant={rekomendasiVariant(komite.rekomendasi)}>
                             {komite.rekomendasi}
@@ -968,6 +1238,10 @@ export function SlikAnalyzerClientView({
                           <Badge variant="outline">{komite.risk_rating}</Badge>
                         </div>
                       </div>
+                      <p className="mt-1 text-[11px] italic text-muted-foreground">
+                        Bukan keputusan kredit final — keputusan akhir dicatat oleh pejabat pemutus
+                        setelah verifikasi manual atas angka baki debet, tunggakan, dan kolektibilitas.
+                      </p>
                       {komite.saran_tindakan.length > 0 && (
                         <ol className="mt-3 space-y-1 text-xs">
                           {komite.saran_tindakan.map((saran, index) => (
@@ -994,6 +1268,73 @@ export function SlikAnalyzerClientView({
           )}
         </div>
       )}
+
+      {/* Tahap 5A (P0.5): riwayat hasil tersimpan — lihat ulang & unduh ulang */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <History className="h-5 w-5 text-primary" /> Riwayat Hasil Analisa Tersimpan
+          </CardTitle>
+          <CardDescription>
+            Setiap hasil analisa tersimpan otomatis terkait debitur terpilih. Klik &quot;Lihat&quot;
+            untuk menampilkan ulang hasilnya, atau &quot;Unduh PDF&quot; untuk mencetak ulang laporan.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {historyLoading ? (
+            <p className="text-sm text-muted-foreground">Memuat riwayat hasil analisa...</p>
+          ) : historyError ? (
+            <p className="text-sm text-destructive">{historyError}</p>
+          ) : history.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Belum ada hasil analisa tersimpan. Hasil analisa berikutnya akan otomatis muncul di sini.
+            </p>
+          ) : (
+            <div className="divide-y divide-border rounded-md border text-sm">
+              {history.map((item) => (
+                <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{item.customerName}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {new Date(item.createdAt).toLocaleString("id-ID")} ·{" "}
+                      {item.mode === "merge" ? "Gabung" : "Per berkas"}
+                      {item.sourceFileNames?.length ? ` · ${item.sourceFileNames.join(", ")}` : ""}
+                      {item.createdBy?.fullName ? ` · ${item.createdBy.fullName}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={rekomendasiVariant(item.rekomendasi)}>{item.rekomendasi}</Badge>
+                    {item.riskRating && <Badge variant="outline">{item.riskRating}</Badge>}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 text-xs"
+                      disabled={busyRecordId === item.id}
+                      onClick={() => viewHistoryItem(item.id)}
+                    >
+                      <Eye className="h-3.5 w-3.5" /> Lihat
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 text-xs"
+                      disabled={busyRecordId === item.id}
+                      onClick={() => downloadHistoryItem(item.id)}
+                    >
+                      {busyRecordId === item.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Download className="h-3.5 w-3.5" />
+                      )}
+                      Unduh PDF
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

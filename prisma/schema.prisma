@@ -43,6 +43,8 @@ model Organization {
   cmsReports           CmsReport[]
   cmsHeroSlides        CmsHeroSlide[]
   masterItems          MasterItem[]
+  slikAnalysisRecords  SlikAnalysisRecord[]
+  creditSlikOverrides  CreditSlikOverride[]
 
   @@map("organizations")
 }
@@ -63,6 +65,7 @@ model Branch {
   leads              Lead[] // existing leads relation
   customers          Customer[] // Tahap 2A (P0.2): nasabah dapat terikat ke cabang
   creditApplications CreditApplication[]
+  slikAnalysisRecords SlikAnalysisRecord[]
   fieldTasks         FieldTask[]
   inventoryItems     InventoryItem[]
   assets             Asset[]
@@ -151,6 +154,8 @@ model User {
   createdPurchaseOrders          PurchaseOrder[]        @relation("PurchaseOrderCreator")
   receivedGoodsReceipts          GoodsReceipt[]         @relation("GoodsReceiptReceiver")
   performedWorkflowActions       WorkflowAction[]       @relation("WorkflowActionActor")
+  createdSlikAnalyses            SlikAnalysisRecord[]    @relation("SlikAnalysisCreatedBy")
+  recordedSlikOverrides          CreditSlikOverride[]    @relation("SlikOverrideRecorder")
   auditLogs                      AuditLog[]             @relation("AuditLogUser")
   notifications                  Notification[]         @relation("UserNotifications")
   mfaBackupCodes                 MfaBackupCode[]
@@ -372,6 +377,9 @@ model Customer {
 
   creditApplications CreditApplication[]
 
+  // Tahap 5A (P0.5): hasil analisa SLIK yang tersimpan untuk nasabah ini.
+  slikAnalyses SlikAnalysisRecord[]
+
   // Tahap 2B (P0.2): riwayat identitas, hubungan antar-pihak, dan persetujuan data pribadi.
   identityHistories      CustomerIdentityHistory[]
   relationshipsAsSubject CustomerRelationship[]    @relation("CustomerRelationshipSubject")
@@ -531,8 +539,81 @@ model CreditApplication {
   statusHistories CreditStatusHistory[]
   approvalRecords CreditApprovalRecord[]
   fieldTasks      FieldTask[]
+  slikAnalyses    SlikAnalysisRecord[]
+  slikOverrides   CreditSlikOverride[]
 
   @@map("credit_applications")
+}
+
+/// Hasil analisa SLIK OJK (IDEB) yang tersimpan (Tahap 5A — P0.5).
+/// Setiap hasil analisa WAJIB terkait nasabah terdaftar (dari pengajuan kredit),
+/// sehingga hasil analisa tidak pernah menjadi data liar yang hilang saat
+/// pengguna memasukkan analisa baru.
+/// Nominal uang sengaja TIDAK dijadikan kolom tersendiri — nilai uang tetap di
+/// dalam `result` (JSON) dan akan ikut dimigrasikan bersama P0.6 (Tahap 6).
+model SlikAnalysisRecord {
+  id                  String   @id @default(uuid()) @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  branchId            String?  @map("branch_id") @db.Uuid
+  customerId          String   @map("customer_id") @db.Uuid
+  creditApplicationId String?  @map("credit_application_id") @db.Uuid
+
+  // Snapshot ringkas untuk daftar/riwayat (tetap terbaca bila data induk berubah).
+  customerName    String @map("customer_name") @db.VarChar(200)
+  sourceFileNames Json?  @map("source_file_names") // daftar nama berkas PDF sumber
+  mode            String @db.VarChar(20) // "per-file" | "merge"
+
+  // Ringkasan hasil AI untuk daftar/penyaringan. `rekomendasi` adalah
+  // REKOMENDASI AI (alat bantu analisis), BUKAN keputusan kredit.
+  rekomendasi String  @db.VarChar(20) // REJECT | APPROVE | CONSIDER
+  riskRating  String? @map("risk_rating") @db.VarChar(40)
+  modelUsed   String? @map("model_used") @db.VarChar(100)
+  elapsedMs   Int?    @map("elapsed_ms")
+
+  // Hasil lengkap ternormalisasi (SlikAnalysis) + metadata (warnings, sources).
+  result Json
+  meta   Json?
+
+  createdById String?   @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization      Organization       @relation(fields: [organizationId], references: [id])
+  branch            Branch?            @relation(fields: [branchId], references: [id])
+  customer          Customer           @relation(fields: [customerId], references: [id])
+  creditApplication CreditApplication? @relation(fields: [creditApplicationId], references: [id])
+  createdBy         User?              @relation("SlikAnalysisCreatedBy", fields: [createdById], references: [id])
+
+  overrides CreditSlikOverride[]
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, customerId])
+  @@map("slik_analysis_records")
+}
+
+/// Alasan penerusan pengajuan meski rekomendasi AI = REJECT (Tahap 5B — P0.5).
+/// Wajib diisi oleh Account Officer atau petugas survei lapangan sebelum
+/// pengajuan dapat dilanjutkan. Satu alasan menanggapi satu analisa — bila
+/// muncul analisa REJECT yang lebih baru, alasan baru diperlukan kembali.
+model CreditSlikOverride {
+  id                   String   @id @default(uuid()) @db.Uuid
+  organizationId       String   @map("organization_id") @db.Uuid
+  creditApplicationId  String   @map("credit_application_id") @db.Uuid
+  slikAnalysisRecordId String?  @map("slik_analysis_record_id") @db.Uuid
+  rekomendasi          String   @db.VarChar(20) // rekomendasi AI yang ditanggapi (REJECT)
+  reason               String   @db.Text
+  recordedById         String?  @map("recorded_by_id") @db.Uuid
+  recordedByName       String   @map("recorded_by_name") @db.VarChar(200)
+  recordedByRole       String   @map("recorded_by_role") @db.VarChar(40) // AO | SURVEY
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization       Organization        @relation(fields: [organizationId], references: [id])
+  creditApplication  CreditApplication   @relation(fields: [creditApplicationId], references: [id])
+  slikAnalysisRecord SlikAnalysisRecord? @relation(fields: [slikAnalysisRecordId], references: [id])
+  recordedBy         User?               @relation("SlikOverrideRecorder", fields: [recordedById], references: [id])
+
+  @@index([creditApplicationId, createdAt])
+  @@map("credit_slik_overrides")
 }
 
 model CreditStatusHistory {

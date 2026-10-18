@@ -248,20 +248,24 @@ Kriteria selesai:
 Temuan yang perlu diverifikasi:
 - Teks PDF SLIK sebelumnya dilaporkan dikirim ke pihak ketiga (OpenRouter).
 - Modul AI sebelumnya dilaporkan memberikan rekomendasi `APPROVE`/`REJECT`.
+- Sebelumnya PDF Slik hanya dikirimkan dan dianalisa oleh AI kemudian hilang jika memasukkan analysis baru.
 
 Tugas:
-- Petakan data yang dikirim ke penyedia AI dan pastikan alur ini dinonaktifkan sampai penggunaan pihak ketiga disetujui oleh pemilik proses, legal/compliance, dan pihak keamanan.
+- Pastikan user memilih Data debitur yang terdaftar di pengajuan kredit untuk di analisa SLIKnya ke pihak ketiga.
+- Petakan data yang dikirim ke penyedia AI.
 - Minimalkan, masking, atau anonimisasi data sensitif sebelum pemrosesan eksternal jika telah disetujui dan layak secara teknis.
 - Tampilkan dengan jelas bahwa hasil AI adalah alat bantu analisis, bukan keputusan final.
 - Wajibkan pejabat pemutus mencatat keputusan akhir dan alasan/pertimbangannya.
 - Wajibkan verifikasi manual angka baki debet, tunggakan, dan kolektibilitas hasil ekstraksi AI.
 - Batasi akses ke dokumen dan hasil ekstraksi SLIK serta catat akses pentingnya.
 - Tangani kegagalan, output tidak valid, dan prompt injection dari isi dokumen sebagai input tidak tepercaya.
+- Simpan hasil analisa SLIK ke database sesuai dengan data Debitur yang dipilih.
 
 Kriteria selesai:
 - Tidak ada keputusan kredit otomatis hanya berdasarkan output AI.
-- Data yang dikirim ke penyedia eksternal terdokumentasi dan disetujui.
+- Data yang dikirim ke penyedia eksternal terdokumentasi.
 - Hasil AI dapat ditinjau, dikoreksi, dan ditelusuri.
+- Hasil analisa bisa di lihat ulang dan di unduh ulang.
 
 #### P0.6 Presisi angka keuangan
 

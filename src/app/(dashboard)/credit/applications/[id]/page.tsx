@@ -132,11 +132,94 @@ export default async function CreditApplicationDetailPage({
     notFound();
   }
 
+  // Tahap 5 (P0.5): hasil analisa SLIK milik debitur pengajuan ini — untuk
+  // ditampilkan di pipeline (tab Analisis) sebagai bahan verifikasi manual.
+  const slikRecords = await db.slikAnalysisRecord.findMany({
+    where: { organizationId: currentUser.organizationId, customerId: application.customerId },
+    select: {
+      id: true,
+      creditApplicationId: true,
+      customerName: true,
+      sourceFileNames: true,
+      mode: true,
+      rekomendasi: true,
+      riskRating: true,
+      modelUsed: true,
+      createdAt: true,
+      result: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  const slikSummaries = slikRecords.map((record) => {
+    const result = (record.result ?? {}) as {
+      ringkasan_eksposur?: { total_baki_debet?: number; kualitas_terburuk?: string };
+      rincian_tunggakan?: { total_tunggakan_real?: number };
+      data_pribadi?: { nama_lengkap?: string };
+    };
+    return {
+      id: record.id,
+      linkedToApplication: record.creditApplicationId === id,
+      customerName: record.customerName,
+      sourceFileNames: record.sourceFileNames,
+      mode: record.mode,
+      rekomendasi: record.rekomendasi,
+      riskRating: record.riskRating,
+      modelUsed: record.modelUsed,
+      createdAt: record.createdAt,
+      totalBakiDebet: result.ringkasan_eksposur?.total_baki_debet ?? null,
+      totalTunggakanReal: result.rincian_tunggakan?.total_tunggakan_real ?? null,
+      kualitasTerburuk: result.ringkasan_eksposur?.kualitas_terburuk ?? null,
+      namaPadaDokumen: result.data_pribadi?.nama_lengkap ?? null,
+    };
+  });
+
+  // Tahap 5B (P0.5): status gate — bila analisa AI terbaru = REJECT dan belum
+  // ada alasan penerusan yang menanggapinya, pengajuan hanya dapat dilanjutkan
+  // setelah Account Officer / petugas survei mengisi alasan.
+  const slikOverrides = await db.creditSlikOverride.findMany({
+    where: { organizationId: currentUser.organizationId, creditApplicationId: id },
+    select: {
+      id: true,
+      slikAnalysisRecordId: true,
+      rekomendasi: true,
+      reason: true,
+      recordedByName: true,
+      recordedByRole: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+
+  const latestSlik = slikRecords[0] ?? null;
+  const coveringOverride = latestSlik
+    ? (slikOverrides.find((item) => item.slikAnalysisRecordId === latestSlik.id) ?? null)
+    : null;
+
+  const slikGate = {
+    active: Boolean(latestSlik && latestSlik.rekomendasi === "REJECT" && !coveringOverride),
+    latestRekomendasi: latestSlik?.rekomendasi ?? null,
+    latestAnalysisDate: latestSlik?.createdAt ?? null,
+    override: coveringOverride
+      ? {
+          reason: coveringOverride.reason,
+          recordedByName: coveringOverride.recordedByName,
+          recordedByRole: coveringOverride.recordedByRole,
+          createdAt: coveringOverride.createdAt,
+        }
+      : null,
+  };
+
   return (
     <CreditApplicationDetailClientView
       application={JSON.parse(JSON.stringify(application))}
       users={users}
       initialDocuments={JSON.parse(JSON.stringify(documents.map(toDocumentDto)))}
+      initialSlikAnalyses={JSON.parse(JSON.stringify(slikSummaries))}
+      slikGate={JSON.parse(JSON.stringify(slikGate))}
+      slikOverrides={JSON.parse(JSON.stringify(slikOverrides))}
     />
   );
 }

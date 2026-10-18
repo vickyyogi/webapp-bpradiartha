@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { createSecureErrorResponse } from "@/lib/security";
 import { extractClientInfo, logAudit } from "@/lib/audit";
+import { isBranchAllowed, toScopeUser } from "@/lib/access-scope";
 import { extractPdfText } from "@/lib/slik/pdfText";
 import {
   analyzeSlikDocuments,
@@ -29,6 +32,11 @@ import {
  *   Kegagalan satu berkas tidak menggagalkan berkas lain.
  * - "merge": seluruh berkas dianggap milik satu debitur, digabung menjadi satu
  *   prompt → satu JSON → satu laporan.
+ *
+ * Tahap 5A (P0.5): setiap analisa WAJIB memilih debitur yang terdaftar pada
+ * pengajuan kredit (field `customerId`, opsional `creditApplicationId`), dan
+ * hasilnya disimpan ke tabel `slik_analysis_records` agar dapat dilihat ulang
+ * serta diunduh ulang — tidak hilang saat analisa baru dimasukkan.
  */
 
 export const runtime = "nodejs";
@@ -110,6 +118,70 @@ export async function POST(req: NextRequest) {
     const rawFiles = formData.getAll("files");
     const files = rawFiles.filter((entry): entry is File => entry instanceof File);
     const mode: SlikMode = formData.get("mode") === "merge" ? "merge" : "per-file";
+
+    // Tahap 5A (P0.5): analisa WAJIB terkait debitur yang terdaftar pada
+    // pengajuan kredit. Pemilihan diverifikasi di server, bukan hanya di UI.
+    const customerIdRaw = formData.get("customerId");
+    const customerId = typeof customerIdRaw === "string" ? customerIdRaw.trim() : "";
+    if (!customerId) {
+      return NextResponse.json(
+        {
+          error:
+            "Pilih data debitur yang terdaftar pada pengajuan kredit sebelum menjalankan analisa SLIK. " +
+            "Hasil analisa akan disimpan dan dihubungkan ke debitur tersebut.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const creditApplicationIdRaw = formData.get("creditApplicationId");
+    const creditApplicationId =
+      typeof creditApplicationIdRaw === "string" && creditApplicationIdRaw.trim()
+        ? creditApplicationIdRaw.trim()
+        : null;
+
+    const scopeUser = toScopeUser(currentUser);
+    const customer = await db.customer.findFirst({
+      where: {
+        id: customerId,
+        organizationId: currentUser.organizationId,
+        isActive: true,
+        // Hanya nasabah yang memiliki minimal satu pengajuan kredit.
+        creditApplications: { some: {} },
+      },
+      select: { id: true, legalName: true, customerNumber: true, branchId: true },
+    });
+    if (!customer) {
+      return NextResponse.json(
+        {
+          error:
+            "Debitur tidak ditemukan, tidak aktif, atau tidak terdaftar pada pengajuan kredit di organisasi Anda.",
+        },
+        { status: 400 }
+      );
+    }
+    if (!isBranchAllowed(scopeUser, customer.branchId)) {
+      return NextResponse.json(
+        { error: "Debitur berada di luar cakupan cabang Anda." },
+        { status: 403 }
+      );
+    }
+    if (creditApplicationId) {
+      const application = await db.creditApplication.findFirst({
+        where: {
+          id: creditApplicationId,
+          customerId: customer.id,
+          organizationId: currentUser.organizationId,
+        },
+        select: { id: true },
+      });
+      if (!application) {
+        return NextResponse.json(
+          { error: "Pengajuan kredit terpilih tidak cocok dengan debitur yang dipilih." },
+          { status: 400 }
+        );
+      }
+    }
 
     if (files.length === 0) {
       return NextResponse.json(
@@ -255,14 +327,41 @@ export async function POST(req: NextRequest) {
       const result = await analyzeSlikDocuments(budgeted.sources);
       result.warnings = [...warnings, ...result.warnings];
 
+      // Tahap 5A (P0.5): simpan hasil analisa terkait debitur terpilih.
+      const record = await db.slikAnalysisRecord.create({
+        data: {
+          organizationId: currentUser.organizationId,
+          branchId: customer.branchId ?? currentUser.branchId ?? null,
+          customerId: customer.id,
+          creditApplicationId,
+          customerName: customer.legalName,
+          sourceFileNames: budgeted.sources.map((source) => source.fileName),
+          mode,
+          rekomendasi: result.data.analisis_dan_rekomendasi.keputusan_komite.rekomendasi,
+          riskRating: result.data.analisis_dan_rekomendasi.keputusan_komite.risk_rating,
+          modelUsed: result.model,
+          elapsedMs: result.elapsedMs,
+          result: result.data as unknown as Prisma.InputJsonValue,
+          meta: {
+            warnings: result.warnings,
+            sources: result.sources,
+            fileStatus,
+          } as unknown as Prisma.InputJsonValue,
+          createdById: currentUser.id,
+        },
+      });
+
       await logAudit({
         organizationId: currentUser.organizationId,
         userId: currentUser.id,
         action: "CREATE",
         entityType: "SLIK_ANALYSIS",
-        entityId: result.data.header.nomor_laporan || `SLIK-${Date.now()}`,
+        entityId: record.id,
         newValues: {
           mode,
+          customerId: customer.id,
+          customerName: customer.legalName,
+          creditApplicationId,
           model: result.model,
           scannedFiles: files.map((file) => file.name),
           analyzedFiles: budgeted.sources.map((source) => source.fileName),
@@ -279,6 +378,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         mode,
+        recordId: record.id,
         data: result.data,
         meta: { ...result, files: fileStatus },
       });
@@ -323,6 +423,57 @@ export async function POST(req: NextRequest) {
     const okCount = results.filter((item) => item.ok).length;
     const failed = results.length - okCount;
 
+    // Tahap 5A (P0.5): simpan setiap hasil yang berhasil terkait debitur terpilih.
+    const savedRecords: Array<{ fileName: string; recordId: string }> = [];
+    for (const item of results) {
+      if (!item.ok || !item.data) continue;
+      const record = await db.slikAnalysisRecord.create({
+        data: {
+          organizationId: currentUser.organizationId,
+          branchId: customer.branchId ?? currentUser.branchId ?? null,
+          customerId: customer.id,
+          creditApplicationId,
+          customerName: customer.legalName,
+          sourceFileNames: [item.fileName],
+          mode,
+          rekomendasi: item.data.analisis_dan_rekomendasi.keputusan_komite.rekomendasi,
+          riskRating: item.data.analisis_dan_rekomendasi.keputusan_komite.risk_rating,
+          modelUsed: item.model,
+          elapsedMs: item.elapsedMs,
+          result: item.data as unknown as Prisma.InputJsonValue,
+          meta: {
+            warnings: item.warnings,
+            sources: [item.source],
+            fileStatus: fileStatus.filter((status) => status.fileName === item.fileName),
+          } as unknown as Prisma.InputJsonValue,
+          createdById: currentUser.id,
+        },
+      });
+      savedRecords.push({ fileName: item.fileName, recordId: record.id });
+
+      await logAudit({
+        organizationId: currentUser.organizationId,
+        userId: currentUser.id,
+        action: "CREATE",
+        entityType: "SLIK_ANALYSIS",
+        entityId: record.id,
+        newValues: {
+          mode,
+          customerId: customer.id,
+          customerName: customer.legalName,
+          creditApplicationId,
+          sourceFile: item.fileName,
+          model: item.model,
+          debitur: item.data.data_pribadi.nama_lengkap,
+          rekomendasi: item.data.analisis_dan_rekomendasi.keputusan_komite.rekomendasi,
+          riskRating: item.data.analisis_dan_rekomendasi.keputusan_komite.risk_rating,
+        },
+        notes: `Analisa SLIK OJK (mode per berkas) memakai model ${item.model}.`,
+        ipAddress,
+        userAgent,
+      });
+    }
+
     await logAudit({
       organizationId: currentUser.organizationId,
       userId: currentUser.id,
@@ -331,6 +482,8 @@ export async function POST(req: NextRequest) {
       entityId: `SLIK-BATCH-${Date.now()}`,
       newValues: {
         mode,
+        customerId: customer.id,
+        customerName: customer.legalName,
         debitur: results.filter((item) => item.ok).map((item) => item.data!.data_pribadi.nama_lengkap),
         rekomendasi: results
           .filter((item) => item.ok)
@@ -338,6 +491,7 @@ export async function POST(req: NextRequest) {
         scannedFiles: files.map((file) => file.name),
         analyzedFiles: results.filter((item) => item.ok).map((item) => item.fileName),
         models: [...new Set(results.filter((item) => item.ok).map((item) => item.model))],
+        recordIds: savedRecords.map((saved) => saved.recordId),
       },
       notes: `Analisa SLIK OJK (mode per berkas): ${okCount} berkas berhasil, ${failed} gagal.`,
       ipAddress,
@@ -347,7 +501,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       mode,
-      results,
+      results: results.map((item) => ({
+        ...item,
+        recordId: savedRecords.find((saved) => saved.fileName === item.fileName)?.recordId ?? null,
+      })),
       meta: {
         mode,
         files: fileStatus,

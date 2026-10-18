@@ -3,8 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  Eye,
   FileText,
   MapPin,
   Save,
@@ -13,9 +15,12 @@ import {
   DollarSign,
   History,
   CheckSquare,
+  Loader2,
   Upload,
   Download,
 } from "lucide-react";
+import { formatRupiah, type SlikAnalysis } from "@/lib/slik/types";
+import { isContinuationStatus, OVERRIDE_REASON_MIN_LENGTH, overrideRoleLabel } from "@/lib/slik/override";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -84,6 +89,51 @@ type DocumentItem = {
   uploadedBy?: { fullName?: string | null } | null;
 };
 
+/** Ringkasan hasil analisa SLIK tersimpan (Tahap 5 — integrasi pipeline kredit). */
+type SlikAnalysisSummary = {
+  id: string;
+  linkedToApplication: boolean;
+  customerName: string;
+  sourceFileNames?: string[] | null;
+  mode: string;
+  rekomendasi: string;
+  riskRating?: string | null;
+  modelUsed?: string | null;
+  createdAt: string | Date;
+  totalBakiDebet?: number | null;
+  totalTunggakanReal?: number | null;
+  kualitasTerburuk?: string | null;
+  namaPadaDokumen?: string | null;
+};
+
+/** Alasan penerusan pengajuan meski rekomendasi AI = REJECT (Tahap 5B). */
+type SlikOverrideItem = {
+  id: string;
+  slikAnalysisRecordId?: string | null;
+  rekomendasi: string;
+  reason: string;
+  recordedByName: string;
+  recordedByRole: string;
+  createdAt: string | Date;
+};
+
+/** Status gate penerusan pengajuan terkait rekomendasi AI. */
+type SlikGateState = {
+  active: boolean;
+  latestRekomendasi?: string | null;
+  latestAnalysisDate?: string | Date | null;
+  override?: {
+    reason: string;
+    recordedByName: string;
+    recordedByRole: string;
+    createdAt: string | Date;
+  } | null;
+};
+
+type OverrideTarget =
+  | { kind: "transition"; nextStatus: string; defaultNote: string }
+  | { kind: "decision"; nextStatus: string; statusOverride?: string };
+
 type CreditApplicationDetail = {
   id: string;
   applicationNumber: string;
@@ -106,7 +156,7 @@ type CreditApplicationDetail = {
   realizationDate?: string | Date | null;
   analysisData?: AnalysisData | null;
   surveyData?: SurveyData | null;
-  customer?: { legalName?: string | null; phone?: string | null; email?: string | null } | null;
+  customer?: { id?: string | null; legalName?: string | null; phone?: string | null; email?: string | null } | null;
   branch?: { name?: string | null } | null;
   marketingOfficer?: { fullName?: string | null } | null;
   analyst?: { fullName?: string | null } | null;
@@ -131,15 +181,53 @@ const STATUS_ORDER: Array<{
   { key: "APPROVED", label: "Disetujui", desc: "Siap realisasi akad" },
 ];
 
+function slikRekomendasiVariant(rekomendasi: string): "success" | "destructive" | "warning" {
+  if (rekomendasi === "APPROVE") return "success";
+  if (rekomendasi === "CONSIDER") return "warning";
+  return "destructive";
+}
+
+/**
+ * Tahap 5B: status SLIK pada formulir 5C TIDAK diisi manual — diturunkan dari
+ * hasil analisa SLIK terbaru (kualitas/kolektibilitas terburuk hasil ekstraksi
+ * AI), lalu dipetakan ke label kolektibilitas SLIK yang lazim.
+ */
+function deriveSlikStatus(analyses: SlikAnalysisSummary[]): string {
+  const raw = analyses[0]?.kualitasTerburuk?.trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  // Urutan penting: "KURANG LANCAR" mengandung kata "LANCAR".
+  if (upper.includes("5") || upper.includes("MACET")) return "MACET (Kol 5)";
+  if (upper.includes("4") || upper.includes("DIRAGUKAN")) return "DIRAGUKAN (Kol 4)";
+  if (upper.includes("3") || upper.includes("KURANG")) return "KURANG LANCAR (Kol 3)";
+  if (upper.includes("2") || upper.includes("DPK") || upper.includes("PERHATIAN")) return "DPK (Kol 2)";
+  if (upper.includes("1") || upper.includes("LANCAR")) return "LANCAR (Kol 1)";
+  return raw;
+}
+
 export function CreditApplicationDetailClientView({
   application: initialApp,
   initialDocuments = [],
+  initialSlikAnalyses = [],
+  slikGate,
+  slikOverrides = [],
 }: {
   application: CreditApplicationDetail;
   users: Array<{ id: string; fullName: string; email: string }>;
   initialDocuments?: DocumentItem[];
+  initialSlikAnalyses?: SlikAnalysisSummary[];
+  slikGate?: SlikGateState;
+  slikOverrides?: SlikOverrideItem[];
 }) {
   const [app, setApp] = useState(initialApp);
+  const [slikAnalyses] = useState<SlikAnalysisSummary[]>(initialSlikAnalyses);
+  const [downloadingSlikId, setDownloadingSlikId] = useState<string | null>(null);
+
+  // Tahap 5B: dialog alasan penerusan pengajuan meski rekomendasi AI = REJECT.
+  const [overrideDialogOpen, setOverrideDialogOpen] = useState(false);
+  const [overrideTarget, setOverrideTarget] = useState<OverrideTarget | null>(null);
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideError, setOverrideError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"summary" | "analysis" | "survey" | "decision" | "realization" | "history" | "documents">("summary");
   const [isSaving, setIsSaving] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -155,7 +243,6 @@ export function CreditApplicationDetailClientView({
   // Analysis Form State (5C)
   const existingAnalysis: AnalysisData = app.analysisData || {};
   const [analysisData, setAnalysisData] = useState({
-    slikStatus: existingAnalysis.slikStatus || "LANCAR (Kol 1)",
     characterNotes: existingAnalysis.characterNotes || "",
     monthlyIncome: existingAnalysis.monthlyIncome || "",
     monthlyExpense: existingAnalysis.monthlyExpense || "",
@@ -206,13 +293,41 @@ export function CreditApplicationDetailClientView({
     setTimeout(() => setFeedbackMsg(null), 4000);
   };
 
+  /** Unduh ulang laporan PDF hasil analisa SLIK tersimpan (audit tercatat di server). */
+  const downloadSlikReport = async (recordId: string) => {
+    setDownloadingSlikId(recordId);
+    try {
+      const res = await fetch(`/api/slik/analyses/${recordId}/download`);
+      const payload = (await res.json().catch(() => null)) as {
+        success?: boolean;
+        data?: SlikAnalysis;
+        error?: string;
+      };
+      if (!res.ok || !payload?.success || !payload.data) {
+        throw new Error(payload?.error || "Gagal mengambil data analisa SLIK tersimpan.");
+      }
+      const { downloadSlikReportPdf } = await import("@/lib/slik/generateSlikReport");
+      await downloadSlikReportPdf(payload.data);
+    } catch (error) {
+      showNotification(
+        "error",
+        error instanceof Error ? error.message : "Gagal menyusun laporan PDF SLIK."
+      );
+    } finally {
+      setDownloadingSlikId(null);
+    }
+  };
+
   const handleSaveAnalysis = async () => {
     setIsSaving(true);
     try {
       const res = await fetch(`/api/credit/applications/${app.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ analysisData }),
+        body: JSON.stringify({
+          // Status SLIK diturunkan dari hasil analisa — bukan isian manual.
+          analysisData: { ...analysisData, slikStatus: deriveSlikStatus(slikAnalyses) },
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal menyimpan analisis.");
@@ -244,12 +359,13 @@ export function CreditApplicationDetailClientView({
     }
   };
 
-  const handleSaveDecision = async (statusOverride?: string) => {
+  const handleSaveDecision = async (statusOverride?: string, slikOverrideReason = "") => {
     setIsSaving(true);
     try {
       const payload = {
         ...decisionData,
         status: statusOverride || decisionData.status,
+        ...(slikOverrideReason ? { slikOverrideReason } : {}),
       };
 
       const res = await fetch(`/api/credit/applications/${app.id}`, {
@@ -288,7 +404,7 @@ export function CreditApplicationDetailClientView({
     }
   };
 
-  const handleQuickStatusTransition = async (nextStatus: string, defaultNote: string) => {
+  const handleQuickStatusTransition = async (nextStatus: string, defaultNote: string, slikOverrideReason = "") => {
     if (!confirm(`Ubah status pengajuan menjadi "${nextStatus}"?`)) return;
     setIsSaving(true);
     try {
@@ -298,6 +414,7 @@ export function CreditApplicationDetailClientView({
         body: JSON.stringify({
           status: nextStatus,
           statusChangeNote: defaultNote,
+          ...(slikOverrideReason ? { slikOverrideReason } : {}),
         }),
       });
       const json = await res.json();
@@ -308,6 +425,53 @@ export function CreditApplicationDetailClientView({
       showNotification("error", e instanceof Error ? e.message : "");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  /**
+   * Tahap 5B: bila rekomendasi AI terakhir = REJECT dan pengajuan diteruskan,
+   * minta alasan penerusan (diisi Account Officer / petugas survei) lebih dulu.
+   */
+  const requestStatusTransition = (nextStatus: string, defaultNote: string) => {
+    if (!slikGate?.active || !isContinuationStatus(nextStatus)) {
+      void handleQuickStatusTransition(nextStatus, defaultNote);
+      return;
+    }
+    setOverrideTarget({ kind: "transition", nextStatus, defaultNote });
+    setOverrideReason("");
+    setOverrideError(null);
+    setOverrideDialogOpen(true);
+  };
+
+  /** Versi ber-gate untuk pencatatan keputusan (APPROVED/RETURNED/REJECTED). */
+  const requestSaveDecision = (statusOverride?: string) => {
+    const targetStatus = statusOverride || decisionData.status;
+    if (!slikGate?.active || !isContinuationStatus(targetStatus)) {
+      void handleSaveDecision(statusOverride);
+      return;
+    }
+    setOverrideTarget({ kind: "decision", nextStatus: targetStatus, statusOverride });
+    setOverrideReason("");
+    setOverrideError(null);
+    setOverrideDialogOpen(true);
+  };
+
+  const confirmOverride = async () => {
+    if (!overrideTarget) return;
+    const reason = overrideReason.trim();
+    if (reason.length < OVERRIDE_REASON_MIN_LENGTH) {
+      setOverrideError(`Alasan penerusan minimal ${OVERRIDE_REASON_MIN_LENGTH} karakter.`);
+      return;
+    }
+    const target = overrideTarget;
+    setOverrideDialogOpen(false);
+    setOverrideTarget(null);
+    setOverrideReason("");
+    setOverrideError(null);
+    if (target.kind === "transition") {
+      await handleQuickStatusTransition(target.nextStatus, target.defaultNote, reason);
+    } else {
+      await handleSaveDecision(target.statusOverride, reason);
     }
   };
 
@@ -379,7 +543,7 @@ export function CreditApplicationDetailClientView({
           {app.status === "SUBMITTED" && (
             <Button
               size="sm"
-              onClick={() => handleQuickStatusTransition("VERIFICATION", "Berkas diterima & masuk tahap verifikasi")}
+              onClick={() => requestStatusTransition("VERIFICATION", "Berkas diterima & masuk tahap verifikasi")}
               disabled={isSaving}
             >
               Mulai Verifikasi Berkas
@@ -388,7 +552,7 @@ export function CreditApplicationDetailClientView({
           {app.status === "VERIFICATION" && (
             <Button
               size="sm"
-              onClick={() => handleQuickStatusTransition("ANALYSIS", "Verifikasi lengkap, dialihkan ke analis kredit")}
+              onClick={() => requestStatusTransition("ANALYSIS", "Verifikasi lengkap, dialihkan ke analis kredit")}
               disabled={isSaving}
             >
               Lanjutkan ke Analisis 5C
@@ -397,7 +561,7 @@ export function CreditApplicationDetailClientView({
           {app.status === "ANALYSIS" && (
             <Button
               size="sm"
-              onClick={() => handleQuickStatusTransition("SURVEY", "Analisis awal selesai, penugasan survey lapangan")}
+              onClick={() => requestStatusTransition("SURVEY", "Analisis awal selesai, penugasan survey lapangan")}
               disabled={isSaving}
             >
               Tugaskan Survey Lapangan
@@ -406,7 +570,7 @@ export function CreditApplicationDetailClientView({
           {app.status === "SURVEY" && (
             <Button
               size="sm"
-              onClick={() => handleQuickStatusTransition("REVIEW", "Hasil survey lengkap, berkas diajukan untuk review")}
+              onClick={() => requestStatusTransition("REVIEW", "Hasil survey lengkap, berkas diajukan untuk review")}
               disabled={isSaving}
             >
               Ajukan Review Komite
@@ -415,7 +579,7 @@ export function CreditApplicationDetailClientView({
           {app.status === "REVIEW" && (
             <Button
               size="sm"
-              onClick={() => handleQuickStatusTransition("DECISION", "Review selesai, siap untuk keputusan akhir")}
+              onClick={() => requestStatusTransition("DECISION", "Review selesai, siap untuk keputusan akhir")}
               disabled={isSaving}
             >
               Sidang Keputusan Komite
@@ -631,6 +795,149 @@ export function CreditApplicationDetailClientView({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Tahap 5 (P0.5): hasil analisa SLIK masuk ke pipeline pengajuan kredit */}
+            <div className="space-y-3 rounded-lg border border-primary/30 bg-primary-soft/20 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold flex items-center gap-2 text-primary">
+                  <ShieldCheck className="h-4 w-4" /> Hasil Analisa SLIK OJK (AI) — Bahan Verifikasi
+                </h3>
+                <Link
+                  href={`/credit/slik-analyzer?customerId=${app.customer?.id ?? ""}&applicationId=${app.id}`}
+                >
+                  <Button variant="outline" size="sm" className="h-7 gap-1 text-xs">
+                    <Upload className="h-3.5 w-3.5" />{" "}
+                    {slikAnalyses.length > 0 ? "Analisa Ulang" : "Jalankan Analisa SLIK"}
+                  </Button>
+                </Link>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Hasil ekstraksi AI untuk mempercepat penilaian Character &amp; Capacity —{" "}
+                <span className="font-medium text-foreground">bukan keputusan kredit final</span>.
+                Wajib diverifikasi manual terhadap dokumen SLIK asli.
+              </p>
+              {/* Tahap 5B: gate penerusan meski rekomendasi AI = REJECT */}
+              {slikGate?.active && (
+                <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2.5 text-xs text-red-900 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <p className="leading-relaxed">
+                    <span className="font-semibold">Rekomendasi AI terakhir: REJECT.</span>{" "}
+                    Pengajuan hanya dapat dilanjutkan setelah{" "}
+                    <span className="font-semibold">Account Officer atau petugas survei lapangan</span>{" "}
+                    mengisi alasan penerusan — dialognya muncul otomatis saat tombol lanjut/keputusan ditekan.
+                  </p>
+                </div>
+              )}
+              {slikGate?.override && (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2.5 text-xs dark:border-emerald-900 dark:bg-emerald-950/20">
+                  <p className="font-semibold text-emerald-800 dark:text-emerald-400">
+                    Diteruskan meski rekomendasi AI REJECT
+                  </p>
+                  <p className="mt-1 leading-relaxed text-muted-foreground">
+                    {overrideRoleLabel(slikGate.override.recordedByRole === "SURVEY" ? "SURVEY" : "AO")}{" "}
+                    ({slikGate.override.recordedByName}) ·{" "}
+                    {new Date(slikGate.override.createdAt).toLocaleString("id-ID")}:{" "}
+                    <span className="italic">{slikGate.override.reason}</span>
+                  </p>
+                </div>
+              )}
+              {slikAnalyses.length === 0 ? (
+                <p className="text-xs italic text-muted-foreground">
+                  Belum ada hasil analisa SLIK untuk debitur ini.
+                </p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+                    <div className="rounded-md border border-border bg-background p-2">
+                      <p className="text-muted-foreground">Total Baki Debet (AI)</p>
+                      <p className="font-semibold">{formatRupiah(slikAnalyses[0].totalBakiDebet ?? 0)}</p>
+                    </div>
+                    <div className="rounded-md border border-border bg-background p-2">
+                      <p className="text-muted-foreground">Total Tunggakan (AI)</p>
+                      <p className="font-semibold">{formatRupiah(slikAnalyses[0].totalTunggakanReal ?? 0)}</p>
+                    </div>
+                    <div className="rounded-md border border-border bg-background p-2">
+                      <p className="text-muted-foreground">Kualitas Terburuk (AI)</p>
+                      <p className="font-semibold">{slikAnalyses[0].kualitasTerburuk || "-"}</p>
+                    </div>
+                    <div className="rounded-md border border-border bg-background p-2">
+                      <p className="text-muted-foreground">Rekomendasi AI</p>
+                      <Badge variant={slikRekomendasiVariant(slikAnalyses[0].rekomendasi)}>
+                        {slikAnalyses[0].rekomendasi}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-border rounded-md border border-border bg-background text-xs">
+                    {slikAnalyses.map((item) => (
+                      <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 p-2.5">
+                        <div className="min-w-0">
+                          <p className="flex flex-wrap items-center gap-1.5 truncate font-medium">
+                            {new Date(item.createdAt).toLocaleString("id-ID")}
+                            {item.linkedToApplication && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                Terkait pengajuan ini
+                              </Badge>
+                            )}
+                          </p>
+                          <p className="truncate text-muted-foreground">
+                            {item.sourceFileNames?.join(", ") || "Laporan SLIK"}
+                            {item.namaPadaDokumen ? ` · ${item.namaPadaDokumen}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge variant={slikRekomendasiVariant(item.rekomendasi)}>{item.rekomendasi}</Badge>
+                          {item.riskRating && <Badge variant="outline">{item.riskRating}</Badge>}
+                          <Link
+                            href={`/credit/slik-analyzer?customerId=${app.customer?.id ?? ""}&applicationId=${app.id}&view=${item.id}`}
+                          >
+                            <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs">
+                              <Eye className="h-3.5 w-3.5" /> Lihat
+                            </Button>
+                          </Link>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 text-xs"
+                            disabled={downloadingSlikId === item.id}
+                            onClick={() => downloadSlikReport(item.id)}
+                          >
+                            {downloadingSlikId === item.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Download className="h-3.5 w-3.5" />
+                            )}
+                            Unduh PDF
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {slikOverrides.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Riwayat Alasan Penerusan (meski rekomendasi AI)
+                  </p>
+                  <div className="divide-y divide-border rounded-md border border-border bg-background text-xs">
+                    {slikOverrides.map((item) => (
+                      <div key={item.id} className="p-2.5">
+                        <p className="flex flex-wrap items-center gap-1.5 font-medium">
+                          {new Date(item.createdAt).toLocaleString("id-ID")} · {item.recordedByName}
+                          <span className="text-muted-foreground">
+                            ({overrideRoleLabel(item.recordedByRole === "SURVEY" ? "SURVEY" : "AO")})
+                          </span>
+                          <Badge variant="outline" className="text-[10px]">
+                            {item.rekomendasi}
+                          </Badge>
+                        </p>
+                        <p className="mt-1 leading-relaxed italic text-muted-foreground">{item.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="grid gap-6 md:grid-cols-2">
               {/* 1. Character */}
               <div className="p-4 border rounded-lg space-y-3 bg-muted/10">
@@ -639,17 +946,24 @@ export function CreditApplicationDetailClientView({
                 </h3>
                 <div>
                   <label className="text-xs font-medium">Hasil Pengecekan Riwayat SLIK / IDEB OJK</label>
-                  <select
-                    value={analysisData.slikStatus}
-                    onChange={(e) => setAnalysisData({ ...analysisData, slikStatus: e.target.value })}
-                    className="w-full mt-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-                  >
-                    <option value="LANCAR (Kol 1)">Lancar (Kolektibilitas 1)</option>
-                    <option value="DPK (Kol 2)">Dalam Perhatian Khusus (Kolektibilitas 2)</option>
-                    <option value="KURANG LANCAR (Kol 3)">Kurang Lancar (Kolektibilitas 3)</option>
-                    <option value="DIRAGUKAN (Kol 4)">Diragukan (Kolektibilitas 4)</option>
-                    <option value="MACET (Kol 5)">Macet (Kolektibilitas 5)</option>
-                  </select>
+                  {slikAnalyses.length > 0 && slikAnalyses[0].kualitasTerburuk ? (
+                    <div className="mt-1 flex items-center gap-2 rounded-md border border-input bg-muted/30 px-3 py-2 text-sm">
+                      <ShieldCheck className="h-4 w-4 shrink-0 text-primary" />
+                      <span className="font-medium">{deriveSlikStatus(slikAnalyses)}</span>
+                      <Badge variant={slikRekomendasiVariant(slikAnalyses[0].rekomendasi)} className="ml-auto">
+                        {slikAnalyses[0].rekomendasi}
+                      </Badge>
+                    </div>
+                  ) : (
+                    <p className="mt-1 rounded-md border border-dashed border-input px-3 py-2 text-xs text-muted-foreground">
+                      Belum ada hasil analisa SLIK untuk debitur ini — jalankan analisa SLIK, status akan
+                      terisi otomatis dari hasil analisa.
+                    </p>
+                  )}
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Diisi otomatis dari hasil analisa SLIK (alat bantu AI) — verifikasi manual terhadap
+                    dokumen SLIK asli tetap wajib.
+                  </p>
                 </div>
                 <div>
                   <label className="text-xs font-medium">Catatan Integritas & Reputasi Lingkungan</label>
@@ -955,7 +1269,7 @@ export function CreditApplicationDetailClientView({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => handleSaveDecision("RETURNED")}
+                  onClick={() => requestSaveDecision("RETURNED")}
                   disabled={isSaving}
                   className="text-orange-600 hover:text-orange-700"
                 >
@@ -964,14 +1278,14 @@ export function CreditApplicationDetailClientView({
                 <Button
                   size="sm"
                   variant="destructive"
-                  onClick={() => handleSaveDecision("REJECTED")}
+                  onClick={() => requestSaveDecision("REJECTED")}
                   disabled={isSaving}
                 >
                   Tolak Pengajuan (Reject)
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => handleSaveDecision("APPROVED")}
+                  onClick={() => requestSaveDecision("APPROVED")}
                   disabled={isSaving}
                   className="bg-green-600 hover:bg-green-700 text-white"
                 >
@@ -1102,7 +1416,7 @@ export function CreditApplicationDetailClientView({
             )}
 
             <div className="flex justify-end">
-              <Button onClick={() => handleSaveDecision()} disabled={isSaving} className="gap-2">
+              <Button onClick={() => requestSaveDecision()} disabled={isSaving} className="gap-2">
                 <Save className="h-4 w-4" />
                 {isSaving ? "Menyimpan..." : "Simpan Ketetapan Putusan"}
               </Button>
@@ -1324,6 +1638,70 @@ export function CreditApplicationDetailClientView({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Tahap 5B: dialog alasan penerusan meski rekomendasi AI = REJECT */}
+      <Dialog
+        open={overrideDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOverrideDialogOpen(false);
+            setOverrideTarget(null);
+            setOverrideError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive" /> Alasan Penerusan Pengajuan
+            </DialogTitle>
+            <DialogDescription>
+              Analisa SLIK terakhir merekomendasikan{" "}
+              <span className="font-semibold text-foreground">REJECT</span>. Untuk tetap melanjutkan ke
+              tahap <span className="font-semibold text-foreground">{overrideTarget?.nextStatus}</span>,
+              Account Officer atau petugas survei lapangan wajib mengisi alasan penerusan. Alasan ini
+              disimpan permanen dan dicatat ke audit log.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label htmlFor="slik-override-reason" className="text-xs font-semibold">
+              Alasan mengapa pengajuan tetap diteruskan
+            </label>
+            <textarea
+              id="slik-override-reason"
+              rows={4}
+              value={overrideReason}
+              onChange={(event) => {
+                setOverrideReason(event.target.value);
+                setOverrideError(null);
+              }}
+              placeholder={`Minimal ${OVERRIDE_REASON_MIN_LENGTH} karakter. Contoh: tunggakan berasal dari fasilitas yang sudah lunas dan debitur memiliki agunan tambahan yang menutupi plafon...`}
+              className="w-full rounded-md border border-input bg-background p-2 text-sm"
+            />
+            {overrideError && <p className="text-xs text-destructive">{overrideError}</p>}
+            <p className="text-[11px] text-muted-foreground">
+              Hanya Account Officer / petugas survei lapangan yang berwenang mengisi — diverifikasi di
+              server, bukan hanya di tampilan.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setOverrideDialogOpen(false);
+                setOverrideTarget(null);
+                setOverrideError(null);
+              }}
+            >
+              Batal
+            </Button>
+            <Button type="button" onClick={() => void confirmOverride()} className="gap-2">
+              <CheckCircle2 className="h-4 w-4" /> Teruskan &amp; Simpan Alasan
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

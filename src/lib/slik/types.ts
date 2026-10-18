@@ -14,7 +14,9 @@
 export type SlikRekomendasi = "REJECT" | "APPROVE" | "CONSIDER";
 
 export interface SlikHeader {
+  nomor_laporan: string;
   posisi_data: string;
+  operator: string;
 }
 
 export interface SlikDataPribadi {
@@ -250,7 +252,9 @@ export function normalizeSlikAnalysis(raw: unknown): { data: SlikAnalysis; issue
 
   const data: SlikAnalysis = {
     header: {
-      posisi_data: asString(header.posisi_data)
+      nomor_laporan: asString(header.nomor_laporan),
+      posisi_data: asString(header.posisi_data),
+      operator: asString(header.operator)
     },
     data_pribadi: {
       nama_lengkap: asString(dataPribadi.nama_lengkap),

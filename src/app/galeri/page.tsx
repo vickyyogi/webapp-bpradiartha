@@ -10,9 +10,7 @@ import {
   ChevronRight,
   FileText,
   Tag,
-  Sparkles,
   Maximize2,
-  Info,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -73,7 +71,7 @@ export default function GaleriPage() {
       case "RAPAT":
         return "bg-primary-soft text-primary border border-primary/20";
       case "PENGHARGAAN":
-        return "bg-gold text-white font-semibold";
+        return "bg-gold text-lp-on-accent font-semibold";
       default:
         return "bg-muted text-foreground border border-border";
     }

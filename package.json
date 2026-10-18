@@ -9,6 +9,7 @@
     "lint": "eslint",
     "postinstall": "prisma skills sync || exit 0",
     "verify:slik": "ts-node --project scripts/tsconfig.json scripts/verify-slik-logic.ts && ts-node --project scripts/tsconfig.json scripts/verify-slik-report.ts",
+    "verify:slik-records": "ts-node --project scripts/tsconfig.json scripts/verify-slik-records.ts",
     "verify:slik:live": "ts-node --project scripts/tsconfig.json scripts/verify-slik-openrouter.ts",
     "verify:auth": "ts-node --project scripts/tsconfig.json scripts/verify-auth.ts",
     "verify:auth:live": "ts-node --project scripts/tsconfig.json scripts/verify-auth-live.ts",
