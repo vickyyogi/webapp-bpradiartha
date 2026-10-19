@@ -34,6 +34,7 @@ interface MasterItemAttributes {
   maxAmount?: number;
   minTenor?: number;
   maxTenor?: number;
+  requiredDocuments?: string[];
 }
 
 interface MasterItem {
@@ -60,6 +61,7 @@ const CATEGORIES = [
 
 export default function MasterDataPage() {
   const [items, setItems] = useState<MasterItem[]>([]);
+  const [docTypes, setDocTypes] = useState<Array<{ code: string; name: string }>>([]);
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -81,7 +83,26 @@ export default function MasterDataPage() {
     maxAmount: 500000000,
     minTenor: 6,
     maxTenor: 36,
+    requiredDocuments: [] as string[],
   });
+
+  // Tahap 9A (P1.1): daftar jenis dokumen untuk persyaratan produk.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/master-data?category=DOCUMENT_TYPE");
+        if (!res.ok) return;
+        const data = (await res.json()) as MasterItem[];
+        if (!cancelled) setDocTypes(data.filter((d) => d.isActive).map((d) => ({ code: d.code, name: d.name })));
+      } catch (e) {
+        console.error("Failed to fetch document types:", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,6 +147,7 @@ export default function MasterDataPage() {
       maxAmount: 500000000,
       minTenor: 6,
       maxTenor: 36,
+      requiredDocuments: [],
     });
     setModalOpen(true);
   };
@@ -145,6 +167,7 @@ export default function MasterDataPage() {
       maxAmount: attrs.maxAmount || 500000000,
       minTenor: attrs.minTenor || 6,
       maxTenor: attrs.maxTenor || 36,
+      requiredDocuments: attrs.requiredDocuments || [],
     });
     setModalOpen(true);
   };
@@ -159,6 +182,7 @@ export default function MasterDataPage() {
           maxAmount: Number(form.maxAmount),
           minTenor: Number(form.minTenor),
           maxTenor: Number(form.maxTenor),
+          requiredDocuments: form.requiredDocuments,
         };
       }
 
@@ -359,6 +383,9 @@ export default function MasterDataPage() {
                           <div>
                             Tenor: {item.attributes.minTenor}-{item.attributes.maxTenor} bln
                           </div>
+                          <div>
+                            Syarat dokumen: {item.attributes.requiredDocuments?.length || 0} jenis
+                          </div>
                         </div>
                       ) : (
                         <span className="text-muted-foreground/60">-</span>
@@ -494,6 +521,54 @@ export default function MasterDataPage() {
                       onChange={(e) => setForm({ ...form, maxTenor: Number(e.target.value) })}
                     />
                   </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-muted-foreground block mb-0.5">Min Plafon (Rp)</label>
+                    <Input
+                      type="number"
+                      value={form.minAmount}
+                      onChange={(e) => setForm({ ...form, minAmount: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-muted-foreground block mb-0.5">Max Plafon (Rp)</label>
+                    <Input
+                      type="number"
+                      value={form.maxAmount}
+                      onChange={(e) => setForm({ ...form, maxAmount: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] text-muted-foreground block mb-1">
+                    Persyaratan Dokumen (checklist verifikasi berkas)
+                  </label>
+                  {docTypes.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Belum ada Master Data DOCUMENT_TYPE.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-1">
+                      {docTypes.map((doc) => (
+                        <label key={doc.code} className="flex items-center gap-2 text-[11px] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={form.requiredDocuments.includes(doc.code)}
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                requiredDocuments: e.target.checked
+                                  ? [...form.requiredDocuments, doc.code]
+                                  : form.requiredDocuments.filter((code) => code !== doc.code),
+                              })
+                            }
+                          />
+                          {doc.name} ({doc.code})
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

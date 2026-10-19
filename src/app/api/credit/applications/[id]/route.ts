@@ -6,6 +6,7 @@ import { Prisma, CreditApplicationStatus } from "@prisma/client";
 import { hasPermission, requireAnyPermission, requireAuthAndPermission } from "@/lib/permissions";
 import { buildScopeFilter, isBranchAllowed, toScopeUser, violatesSegregationOfDuties } from "@/lib/access-scope";
 import { extractClientInfo, logAudit } from "@/lib/audit";
+import { listActiveCreditProducts, validateCreditRequestAgainstProduct } from "@/lib/credit-product";
 import {
   isContinuationStatus,
   isValidOverrideReason,
@@ -160,6 +161,26 @@ export async function PUT(
     for (const assigneeId of [assignedMarketingOfficerId, assignedAnalystId, assignedSurveyOfficerId]) {
       const err = await ensureAssignable(currentUser.organizationId, (b) => isBranchAllowed(scopeUser, b), assigneeId);
       if (err) return NextResponse.json({ error: err, code: "ASSIGNEE_FORBIDDEN" }, { status: 403 });
+    }
+
+    // Tahap 9A (P1.1): produk/plafon/tenor hasil perubahan divalidasi terhadap
+    // master produk kredit. Produk historis yang tidak ada di master tetap
+    // diperbolehkan selama nilainya tidak diubah.
+    if (product !== undefined || requestedAmount !== undefined || requestedTenorMonths !== undefined) {
+      const products = await listActiveCreditProducts(currentUser.organizationId);
+      const productError = validateCreditRequestAgainstProduct(
+        {
+          product: product !== undefined ? product : existing.product,
+          requestedAmount: requestedAmount !== undefined ? requestedAmount : existing.requestedAmount,
+          requestedTenorMonths:
+            requestedTenorMonths !== undefined ? requestedTenorMonths : existing.requestedTenorMonths,
+        },
+        products,
+        existing.product
+      );
+      if (productError) {
+        return NextResponse.json({ error: productError, code: "CREDIT_PRODUCT_INVALID" }, { status: 400 });
+      }
     }
 
     // Tahap 5B (P0.5): angka ekstraksi AI (baki debet, tunggakan,

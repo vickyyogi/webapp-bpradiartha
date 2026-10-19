@@ -106,6 +106,13 @@ type DocumentOption = {
   fileName: string;
 };
 
+/** Produk kredit aktif dari Master Data (Tahap 9A / P1.1). */
+type ProductOption = {
+  code: string;
+  name: string;
+  attributes?: { minAmount?: number; maxAmount?: number; minTenor?: number; maxTenor?: number } | null;
+};
+
 interface Props {
   initialApplications: CreditApplication[];
   users: UserOption[];
@@ -113,6 +120,7 @@ interface Props {
   leads?: LeadOption[];
   documents?: DocumentOption[];
   customers: CustomerOption[];
+  products?: ProductOption[];
 }
 
 const STATUS_CONFIG: Record<
@@ -156,7 +164,12 @@ export function CreditApplicationsClientView({
   leads = [],
   documents = [],
   customers = [],
+  products = [],
 }: Props) {
+  // Pilihan produk berasal dari Master Data kredit aktif; daftar bawaan hanya
+  // fallback bila master belum dikonfigurasi (server tetap menolak pengajuan).
+  const productNames = products.length > 0 ? products.map((p) => p.name) : CREDIT_PRODUCTS;
+  const defaultProduct = productNames[0] || "";
   const [applications, setApplications] = useState<CreditApplication[]>(initialApplications);
   const [docList, setDocList] = useState<DocumentOption[]>(documents);
   const [searchQuery, setSearchQuery] = useState("");
@@ -175,7 +188,7 @@ export function CreditApplicationsClientView({
 
   // Form State
   const [formData, setFormData] = useState({
-    product: CREDIT_PRODUCTS[0],
+    product: defaultProduct,
     requestedAmount: "",
     requestedTenorMonths: "12",
     purpose: "",
@@ -199,11 +212,17 @@ export function CreditApplicationsClientView({
     notes: "",
   });
 
+  // Produk historis yang tidak lagi ada di master tetap ditampilkan saat edit.
+  const productChoices =
+    formData.product && !productNames.includes(formData.product)
+      ? [formData.product, ...productNames]
+      : productNames;
+
   const resetForm = () => {
     setApplicantMode("MANUAL");
     setKtpData(null);
     setFormData({
-      product: CREDIT_PRODUCTS[0],
+      product: defaultProduct,
       requestedAmount: "",
       requestedTenorMonths: "12",
       purpose: "",
@@ -269,7 +288,7 @@ export function CreditApplicationsClientView({
   const handleOpenEdit = (app: CreditApplication) => {
     setEditingApp(app);
     setFormData({
-      product: app.product || CREDIT_PRODUCTS[0],
+      product: app.product || defaultProduct,
       requestedAmount: app.requestedAmount ? app.requestedAmount.toString() : "",
       requestedTenorMonths: app.requestedTenorMonths ? app.requestedTenorMonths.toString() : "12",
       purpose: app.purpose || "",
@@ -830,7 +849,7 @@ export function CreditApplicationsClientView({
                     className="w-full mt-1.5 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
                     required
                   >
-                    {CREDIT_PRODUCTS.map((p) => (
+                    {productChoices.map((p) => (
                       <option key={p} value={p}>
                         {p}
                       </option>
@@ -995,7 +1014,7 @@ export function CreditApplicationsClientView({
                     className="w-full mt-1.5 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
                     required
                   >
-                    {CREDIT_PRODUCTS.map((p) => (
+                    {productChoices.map((p) => (
                       <option key={p} value={p}>
                         {p}
                       </option>

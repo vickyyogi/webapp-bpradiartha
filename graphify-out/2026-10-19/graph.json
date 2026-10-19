@@ -43777,6 +43777,18 @@
     },
     {
       "source": "src_app_dashboard_credit_applications_id_creditapplicationdetailclientview_creditapplicationdetailclientview",
+      "target": "src_app_dashboard_credit_applications_id_creditapplicationdetailclientview_slikrekomendasivariant",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
+      "source_location": "L1009",
+      "weight": 1.0
+    },
+    {
+      "source": "src_app_dashboard_credit_applications_id_creditapplicationdetailclientview_creditapplicationdetailclientview",
       "target": "src_components_ui_input_input",
       "relation": "calls",
       "_origin": "ast",
@@ -43784,7 +43796,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L1243",
+      "source_location": "L1256",
       "weight": 1.0
     },
     {
@@ -43796,7 +43808,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L1837",
+      "source_location": "L1850",
       "weight": 1.0
     },
     {
@@ -43808,7 +43820,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L1838",
+      "source_location": "L1851",
       "weight": 1.0
     },
     {
@@ -43820,7 +43832,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L1840",
+      "source_location": "L1853",
       "weight": 1.0
     },
     {
@@ -43832,7 +43844,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L1841",
+      "source_location": "L1854",
       "weight": 1.0
     },
     {
@@ -43844,7 +43856,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L1842",
+      "source_location": "L1855",
       "weight": 1.0
     },
     {
@@ -43856,7 +43868,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L1887",
+      "source_location": "L1900",
       "weight": 1.0
     },
     {
@@ -43868,7 +43880,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L370",
+      "source_location": "L375",
       "weight": 1.0
     },
     {
@@ -43880,7 +43892,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L490",
+      "source_location": "L499",
       "weight": 1.0
     },
     {
@@ -43892,7 +43904,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L594",
+      "source_location": "L607",
       "weight": 1.0
     },
     {
@@ -43904,7 +43916,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L646",
+      "source_location": "L659",
       "weight": 1.0
     },
     {
@@ -43916,7 +43928,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L653",
+      "source_location": "L666",
       "weight": 1.0
     },
     {
@@ -43928,7 +43940,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L734",
+      "source_location": "L747",
       "weight": 1.0
     },
     {
@@ -43940,7 +43952,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L735",
+      "source_location": "L748",
       "weight": 1.0
     },
     {
@@ -43952,7 +43964,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L841",
+      "source_location": "L854",
       "weight": 1.0
     },
     {
@@ -43964,7 +43976,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L842",
+      "source_location": "L855",
       "weight": 1.0
     },
     {
@@ -43976,7 +43988,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L923",
+      "source_location": "L936",
       "weight": 1.0
     },
     {
@@ -43988,7 +44000,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L968",
+      "source_location": "L981",
       "weight": 1.0
     },
     {
@@ -44000,19 +44012,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L984",
-      "weight": 1.0
-    },
-    {
-      "source": "src_app_dashboard_credit_applications_id_creditapplicationdetailclientview_creditapplicationdetailclientview",
-      "target": "src_app_dashboard_credit_applications_id_creditapplicationdetailclientview_slikrekomendasivariant",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L996",
+      "source_location": "L997",
       "weight": 1.0
     },
     {
@@ -52198,7 +52198,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx",
-      "source_location": "L350",
+      "source_location": "L355",
       "weight": 1.0
     },
     {

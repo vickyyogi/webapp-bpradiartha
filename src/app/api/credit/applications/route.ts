@@ -25,6 +25,7 @@ import {
   type SniffedDocumentType,
 } from "@/lib/document-storage";
 import { extractClientInfo, logAudit } from "@/lib/audit";
+import { listActiveCreditProducts, validateCreditRequestAgainstProduct } from "@/lib/credit-product";
 
 /** Field penugasan pada pengajuan kredit yang memberi hak akses kepada petugas. */
 export const CREDIT_ASSIGNMENT_FIELDS = [
@@ -187,6 +188,17 @@ export async function POST (req: NextRequest) {
     for (const assigneeId of [assignedMarketingOfficerId, assignedAnalystId, assignedSurveyOfficerId]) {
       const err = await ensureAssignable(scopeUser, assigneeId);
       if (err) return NextResponse.json({ error: err, code: "ASSIGNEE_FORBIDDEN" }, { status: 403 });
+    }
+
+    // Tahap 9A (P1.1): produk, plafon, dan tenor divalidasi terhadap master
+    // produk kredit SEBELUM nasabah/berkas dibuat (server otoritatif).
+    const products = await listActiveCreditProducts(currentUser.organizationId);
+    const productError = validateCreditRequestAgainstProduct(
+      { product, requestedAmount, requestedTenorMonths },
+      products
+    );
+    if (productError) {
+      return NextResponse.json({ error: productError, code: "CREDIT_PRODUCT_INVALID" }, { status: 400 });
     }
 
     // Tahap 4 (P0.4): berkas KTP divalidasi SEBELUM ada data yang dibuat, agar

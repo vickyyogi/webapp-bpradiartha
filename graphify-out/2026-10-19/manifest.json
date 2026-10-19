@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx": {
-    "mtime": 1792374405.2673345,
-    "seen": 1792374492.1020098,
-    "ast_hash": "5c475f4712b04be89bf6204577568023",
+    "mtime": 1792381757.3971558,
+    "seen": 1792381801.3367174,
+    "ast_hash": "da91ceda117bf3ffc4d993f722bb1922",
     "semantic_hash": ""
   },
   "src/app/(dashboard)/credit/applications/[id]/page.tsx": {

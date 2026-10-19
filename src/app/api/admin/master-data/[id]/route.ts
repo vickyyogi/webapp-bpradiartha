@@ -4,6 +4,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
 import { logAudit, extractClientInfo } from "@/lib/audit";
+import { normalizeLoanProductAttributes } from "@/lib/credit-product";
 
 export async function PUT(
   req: NextRequest,
@@ -35,12 +36,23 @@ export async function PUT(
     }
 
     const body = await req.json();
+
+    // Tahap 9A (P1.1): validasi atribut produk kredit sebelum disimpan.
+    let attributes = body.attributes !== undefined ? body.attributes : existing.attributes;
+    if (existing.category === "LOAN_PRODUCT" && body.attributes !== undefined) {
+      const normalized = normalizeLoanProductAttributes(body.attributes);
+      if (normalized.error) {
+        return NextResponse.json({ error: normalized.error }, { status: 400 });
+      }
+      attributes = normalized.attributes;
+    }
+
     const updated = await db.masterItem.update({
       where: { id },
       data: {
         name: body.name !== undefined ? body.name : existing.name,
         description: body.description !== undefined ? body.description : existing.description,
-        attributes: body.attributes !== undefined ? body.attributes : existing.attributes,
+        attributes,
         sortOrder: body.sortOrder !== undefined ? Number(body.sortOrder) : existing.sortOrder,
         isActive: body.isActive !== undefined ? Boolean(body.isActive) : existing.isActive,
       },

@@ -12,6 +12,7 @@
     "verify:slik-records": "ts-node --project scripts/tsconfig.json scripts/verify-slik-records.ts",
     "verify:slik:live": "ts-node --project scripts/tsconfig.json scripts/verify-slik-openrouter.ts",
     "verify:decimal": "ts-node --project scripts/tsconfig.json scripts/verify-decimal.ts",
+    "verify:credit-product": "ts-node --project scripts/tsconfig.json scripts/verify-credit-product.ts",
     "verify:auth": "ts-node --project scripts/tsconfig.json scripts/verify-auth.ts",
     "verify:auth:live": "ts-node --project scripts/tsconfig.json scripts/verify-auth-live.ts",
     "verify:mfa": "ts-node --project scripts/tsconfig.json scripts/verify-mfa.ts",

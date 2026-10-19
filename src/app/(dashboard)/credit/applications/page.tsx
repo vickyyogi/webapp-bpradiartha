@@ -40,7 +40,7 @@ export default async function CreditApplicationsPage() {
     ? {}
     : { OR: [{ branchId: currentUser.branchId ?? undefined }, { id: currentUser.id }] };
 
-  const [applications, users, branches, leads, documents, customers] = await Promise.all([
+  const [applications, users, branches, leads, documents, customers, products] = await Promise.all([
     db.creditApplication.findMany({
       where: applicationScope,
       include: {
@@ -86,6 +86,12 @@ export default async function CreditApplicationsPage() {
       select: { id: true, customerNumber: true, legalName: true, customerType: true, identityNumber: true, phone: true },
       orderBy: { legalName: "asc" },
     }),
+    // Tahap 9A (P1.1): produk kredit aktif dari Master Data (sumber pilihan form).
+    db.masterItem.findMany({
+      where: { organizationId, category: "LOAN_PRODUCT", isActive: true },
+      select: { code: true, name: true, attributes: true },
+      orderBy: { sortOrder: "asc" },
+    }),
   ]);
 
   return (
@@ -96,6 +102,7 @@ export default async function CreditApplicationsPage() {
       leads={JSON.parse(JSON.stringify(leads))}
       documents={JSON.parse(JSON.stringify(documents))}
       customers={JSON.parse(JSON.stringify(customers))}
+      products={JSON.parse(JSON.stringify(products))}
     />
   );
 }

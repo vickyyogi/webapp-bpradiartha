@@ -18,9 +18,9 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1792380616.5961454,
-    "seen": 1792380740.4045587,
-    "ast_hash": "f036e304564d43eb91d815be8791cdf8",
+    "mtime": 1792384317.8276677,
+    "seen": 1792384368.7314143,
+    "ast_hash": "badd741cab8bd1de3a6447b44a645ca3",
     "semantic_hash": ""
   },
   "postcss.config.mjs": {
@@ -78,9 +78,9 @@
     "semantic_hash": ""
   },
   "src/app/(dashboard)/admin/master-data/page.tsx": {
-    "mtime": 1792370843.591841,
-    "seen": 1792373428.1986477,
-    "ast_hash": "d6ee92f276105df152b7210d295ffa45",
+    "mtime": 1792384257.1133556,
+    "seen": 1792384368.7363276,
+    "ast_hash": "b19405ece9cf6363965a9faebcae6770",
     "semantic_hash": ""
   },
   "src/app/(dashboard)/admin/page.tsx": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "src/app/(dashboard)/credit/applications/CreditApplicationsClientView.tsx": {
-    "mtime": 1792370843.591841,
-    "seen": 1792373428.201633,
-    "ast_hash": "8be84ee758deef4bff5da9a33d14874e",
+    "mtime": 1792384304.6036267,
+    "seen": 1792384368.7379875,
+    "ast_hash": "ba424028385bd559bb6419f7c2ab0813",
     "semantic_hash": ""
   },
   "src/app/(dashboard)/credit/applications/[id]/CreditApplicationDetailClientView.tsx": {
@@ -144,9 +144,9 @@
     "semantic_hash": ""
   },
   "src/app/(dashboard)/credit/applications/page.tsx": {
-    "mtime": 1791872869.163308,
-    "seen": 1791874012.9950871,
-    "ast_hash": "ad6e2d0920a85600cd2b92924bacefe3",
+    "mtime": 1792384260.8138533,
+    "seen": 1792384368.7383502,
+    "ast_hash": "54a4348c13db5852b99b4e80c6948fe6",
     "semantic_hash": ""
   },
   "src/app/(dashboard)/credit/page.tsx": {
@@ -396,15 +396,15 @@
     "semantic_hash": ""
   },
   "src/app/api/admin/master-data/[id]/route.ts": {
-    "mtime": 1791861301.7310376,
-    "seen": 1791874012.9999435,
-    "ast_hash": "86f67c979ce1ab7bf0364a0492ecee77",
+    "mtime": 1792384216.9599628,
+    "seen": 1792384368.7463858,
+    "ast_hash": "7a328947a59aca3d69f9e9d01c418c33",
     "semantic_hash": ""
   },
   "src/app/api/admin/master-data/route.ts": {
-    "mtime": 1791861296.9231596,
-    "seen": 1791874012.9999452,
-    "ast_hash": "386cd78e5ad6406d471fc6ec9c819a8f",
+    "mtime": 1792384212.6928627,
+    "seen": 1792384368.7463892,
+    "ast_hash": "7cecb91d06fd192ded2dfe72291142a3",
     "semantic_hash": ""
   },
   "src/app/api/admin/options/route.ts": {
@@ -570,15 +570,15 @@
     "semantic_hash": ""
   },
   "src/app/api/credit/applications/[id]/route.ts": {
-    "mtime": 1792380569.774116,
-    "seen": 1792380740.4211898,
-    "ast_hash": "7dcdd4725d51372c153b09776a85e72f",
+    "mtime": 1792384200.8028011,
+    "seen": 1792384368.7514472,
+    "ast_hash": "9673d74e79e2264b8981f890b773618f",
     "semantic_hash": ""
   },
   "src/app/api/credit/applications/route.ts": {
-    "mtime": 1791872808.6742651,
-    "seen": 1791874013.0030813,
-    "ast_hash": "18329d03652e3adab8889dda5ae9d173",
+    "mtime": 1792384173.8390439,
+    "seen": 1792384368.7514498,
+    "ast_hash": "5492827e83e3ec03ede55cdcda556f59",
     "semantic_hash": ""
   },
   "src/app/api/credit/approval-limits/route.ts": {
@@ -2151,6 +2151,18 @@
     "mtime": 1792380722.2635388,
     "seen": 1792380740.4448338,
     "ast_hash": "b765961d39fd0a7d7ec002d3be508215",
+    "semantic_hash": ""
+  },
+  "scripts/verify-credit-product.ts": {
+    "mtime": 1792384313.9977071,
+    "seen": 1792384368.7334456,
+    "ast_hash": "4e553d05b6b6449ce0547b706d58cbc6",
+    "semantic_hash": ""
+  },
+  "src/lib/credit-product.ts": {
+    "mtime": 1792384162.4327888,
+    "seen": 1792384368.7658834,
+    "ast_hash": "21c5998a114d7d43676f4146d110ad43",
     "semantic_hash": ""
   }
 }

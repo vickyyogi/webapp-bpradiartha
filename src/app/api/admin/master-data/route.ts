@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission, requireAnyPermission } from "@/lib/permissions";
 import { logAudit, extractClientInfo } from "@/lib/audit";
+import { normalizeLoanProductAttributes } from "@/lib/credit-product";
 
 export async function GET (req: NextRequest) {
   try {
@@ -50,6 +51,17 @@ export async function POST (req: NextRequest) {
       return NextResponse.json({ error: "Kategori, kode, dan nama wajib diisi" }, { status: 400 });
     }
 
+    // Tahap 9A (P1.1): atribut produk kredit (plafon, tenor, persyaratan
+    // dokumen) dinormalkan & divalidasi sebelum disimpan.
+    let normalizedAttributes = attributes || null;
+    if (category === "LOAN_PRODUCT") {
+      const normalized = normalizeLoanProductAttributes(attributes);
+      if (normalized.error) {
+        return NextResponse.json({ error: normalized.error }, { status: 400 });
+      }
+      normalizedAttributes = normalized.attributes;
+    }
+
     // Check code uniqueness within org + category
     const existing = await db.masterItem.findUnique({
       where: {
@@ -72,7 +84,7 @@ export async function POST (req: NextRequest) {
         code: code.trim().toUpperCase(),
         name,
         description: description || null,
-        attributes: attributes || null,
+        attributes: normalizedAttributes,
         sortOrder: Number(sortOrder) || 0,
         isActive: isActive !== undefined ? Boolean(isActive) : true,
       },

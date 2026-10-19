@@ -1,7 +1,7 @@
 # Graph Report - webapp-bpradiartha  (2026-10-19)
 
 ## Corpus Check
-- 354 files · ~1,250,145 words
+- 354 files · ~1,250,208 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 5 file(s) not represented in the graph (top: (none) 1, .toml 1, .prisma 1)
 
@@ -842,7 +842,7 @@ Nodes (15): 1. Lokasi penyimpanan, 2. Perubahan, buildMinimalPdf(), main(), pris
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `next` connect `next` to `Input`, `logAudit`, `permissions.ts`, `DashboardShell.tsx`, `CreditApplicationDetailClientView.tsx`, `CardHeader`, `package.json`, `verify-mfa.ts`, `CardContent`, `forbidden/page.tsx`, `hero-slides/upload/route.ts`, `Button`, `requireAuthAndPermission`, `checkRateLimit`, `mfa-service.ts`, `auth-login.ts`, `verify-documents-live.ts`, `app/layout.tsx`, `SlikAnalyzerClientView.tsx`, `leads/[id]/route.ts`, `Card`, `access-scope.ts`, `customers/route.ts`, `analyze-slik/route.ts`, `applications/[id]/page.tsx`, `UserFormPage.tsx`, `next.config.ts`, `document-storage.ts`, `berita/layout.tsx`, `cms/layout.tsx`, `master-data/layout.tsx`, `roles/layout.tsx`, `documents/[id]/route.ts`, `users/layout.tsx`, `audit/layout.tsx`, `dashboard/page.tsx`, `assets/layout.tsx`, `getSessionUser`, `items/layout.tsx`, `inventory/layout.tsx`, `maintenance/layout.tsx`, `purchasing/layout.tsx`, `orders/layout.tsx`, `receipts/layout.tsx`, `requests/layout.tsx`, `vendors/layout.tsx`, `reports/layout.tsx`, `galeri/layout.tsx`, `laporan/layout.tsx`, `app/page.tsx`?**
-  _High betweenness centrality (0.150) - this node is a cross-community bridge._
+  _High betweenness centrality (0.147) - this node is a cross-community bridge._
 - **Why does `@prisma/client` connect `requireAuthAndPermission` to `logAudit`, `password.ts`, `permissions.ts`, `CreditApplicationDetailClientView.tsx`, `package.json`, `Button`, `checkRateLimit`, `verify-customers-live.ts`, `hashPassword`, `migrate-private-documents.ts`, `verify-mfa-live.ts`, `verify-navigation.ts`, `verify-documents-live.ts`, `verify-documents.ts`, `verify-password-reset-live.ts`, `leads/[id]/route.ts`, `verify-auth-live.ts`, `verify-account-security-live.ts`, `verify-customers.ts`, `access-scope.ts`, `next`, `customer.ts`, `customers/route.ts`, `analyze-slik/route.ts`, `applications/[id]/page.tsx`, `document-storage.ts`, `parseDocumentRef`, `documents/[id]/route.ts`?**
   _High betweenness centrality (0.081) - this node is a cross-community bridge._
 - **Why does `react` connect `CardContent` to `Input`, `primitives/radix/toggle.tsx`, `app/layout.tsx`, `SlikAnalyzerClientView.tsx`, `dropdown-menu.tsx`, `CreditApplicationDetailClientView.tsx`, `CardHeader`, `package.json`, `DashboardShell.tsx`, `Card`, `app/page.tsx`, `Button`, `LeadsClientView.tsx`, `clip-path for Animation`, `cms/page.tsx`, `UserFormPage.tsx`?**
