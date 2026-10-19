@@ -1,11 +1,12 @@
 {
     "schema_version": 2,
-    "commit": "097cc4e74e6fd08e38edcaf446c4643f5099028b",
-    "indexed_at": "2026-10-19T05:42:51Z",
+    "commit": "d883560d99e5a04441b68443b7283dc2a23e1985",
+    "indexed_at": "2026-10-19T05:44:49Z",
     "project": "C-Users-SER5-MAX-Documents-VICKY-javascript-webapp-bpradiartha",
     "nodes": 10264,
     "edges": 16248,
-    "original_size": 190971904,
-    "compressed_size": 2715007,
-    "compression_level": 9
+    "original_size": 200540160,
+    "compressed_size": 3748352,
+    "compression_level": 3,
+    "reconcile_basis": "git-clean-head"
 }
