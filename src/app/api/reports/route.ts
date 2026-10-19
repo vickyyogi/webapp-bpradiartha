@@ -106,7 +106,7 @@ export async function GET (req: NextRequest) {
       } else if (domain === "INVENTORY") {
         csvContent = "Kode Barang,Nama Barang,Kategori,Satuan,Stok Saat Ini,Batas Minimum,Harga Satuan,Nilai Total Stok\n";
         inventoryItems.forEach((i) => {
-          const totalVal = (i.unitPrice || 0) * i.currentStock;
+          const totalVal = Number(i.unitPrice || 0) * i.currentStock;
           csvContent += `"${i.itemCode}","${i.name}","${i.category}","${i.unit}","${i.currentStock}","${i.minStock}","${i.unitPrice || 0}","${totalVal}"\n`;
         });
       } else if (domain === "ASSET") {
@@ -117,11 +117,11 @@ export async function GET (req: NextRequest) {
       } else {
         // Default combined summary
         csvContent = "Kategori Laporan,Jumlah Data,Nilai Akumulasi (Rp)\n";
-        csvContent += `"Aplikasi Kredit Total","${creditApps.length}","${creditApps.reduce((s, c) => s + (c.requestedAmount || 0), 0)}"\n`;
-        csvContent += `"Kredit Direalisasikan","${creditApps.filter((c) => c.status === "APPROVED" && c.realizationAmount).length}","${creditApps.reduce((s, c) => s + (c.realizationAmount || 0), 0)}"\n`;
-        csvContent += `"Purchase Order Terbit","${purchaseOrders.length}","${purchaseOrders.reduce((s, p) => s + (p.totalAmount || 0), 0)}"\n`;
-        csvContent += `"Total Nilai Aset Tetap","${assets.length}","${assets.reduce((s, a) => s + (a.purchasePrice || 0), 0)}"\n`;
-        csvContent += `"Total Nilai Stok ATK","${inventoryItems.length}","${inventoryItems.reduce((s, i) => s + (i.unitPrice || 0) * i.currentStock, 0)}"\n`;
+        csvContent += `"Aplikasi Kredit Total","${creditApps.length}","${creditApps.reduce((s, c) => s + Number(c.requestedAmount || 0), 0)}"\n`;
+        csvContent += `"Kredit Direalisasikan","${creditApps.filter((c) => c.status === "APPROVED" && c.realizationAmount).length}","${creditApps.reduce((s, c) => s + Number(c.realizationAmount || 0), 0)}"\n`;
+        csvContent += `"Purchase Order Terbit","${purchaseOrders.length}","${purchaseOrders.reduce((s, p) => s + Number(p.totalAmount || 0), 0)}"\n`;
+        csvContent += `"Total Nilai Aset Tetap","${assets.length}","${assets.reduce((s, a) => s + Number(a.purchasePrice || 0), 0)}"\n`;
+        csvContent += `"Total Nilai Stok ATK","${inventoryItems.length}","${inventoryItems.reduce((s, i) => s + Number(i.unitPrice || 0) * i.currentStock, 0)}"\n`;
       }
 
       return new NextResponse(csvContent, {
@@ -135,9 +135,9 @@ export async function GET (req: NextRequest) {
     // JSON response aggregations
     const creditPipelineSummary = {
       totalApplications: creditApps.length,
-      totalRequestedAmount: creditApps.reduce((s, c) => s + (c.requestedAmount || 0), 0),
-      totalApprovedAmount: creditApps.reduce((s, c) => s + (c.approvedAmount || 0), 0),
-      totalRealizedAmount: creditApps.reduce((s, c) => s + (c.realizationAmount || 0), 0),
+      totalRequestedAmount: creditApps.reduce((s, c) => s + Number(c.requestedAmount || 0), 0),
+      totalApprovedAmount: creditApps.reduce((s, c) => s + Number(c.approvedAmount || 0), 0),
+      totalRealizedAmount: creditApps.reduce((s, c) => s + Number(c.realizationAmount || 0), 0),
       byStatus: {
         SUBMITTED: creditApps.filter((c) => c.status === "SUBMITTED").length,
         VERIFICATION: creditApps.filter((c) => c.status === "VERIFICATION").length,
@@ -161,18 +161,18 @@ export async function GET (req: NextRequest) {
       totalPR: purchaseRequests.length,
       approvedPR: purchaseRequests.filter((p) => p.status === "APPROVED").length,
       totalPO: purchaseOrders.length,
-      totalPOValue: purchaseOrders.reduce((s, p) => s + (p.totalAmount || 0), 0),
+      totalPOValue: purchaseOrders.reduce((s, p) => s + Number(p.totalAmount || 0), 0),
       completedPO: purchaseOrders.filter((p) => p.status === "COMPLETED").length,
     };
 
     const inventoryAssetSummary = {
       totalInventoryItems: inventoryItems.length,
       lowStockItemsCount: inventoryItems.filter((i) => i.currentStock <= i.minStock).length,
-      inventoryValuation: inventoryItems.reduce((s, i) => s + (i.unitPrice || 0) * i.currentStock, 0),
+      inventoryValuation: inventoryItems.reduce((s, i) => s + Number(i.unitPrice || 0) * i.currentStock, 0),
       totalAssetsCount: assets.length,
       assignedAssetsCount: assets.filter((a) => a.status === "ASSIGNED").length,
       maintenanceAssetsCount: assets.filter((a) => a.status === "MAINTENANCE").length,
-      assetTotalValuation: assets.reduce((s, a) => s + (a.purchasePrice || 0), 0),
+      assetTotalValuation: assets.reduce((s, a) => s + Number(a.purchasePrice || 0), 0),
     };
 
     return NextResponse.json({

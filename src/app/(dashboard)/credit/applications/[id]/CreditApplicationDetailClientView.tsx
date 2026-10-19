@@ -269,6 +269,11 @@ export function CreditApplicationDetailClientView({
   const [overrideTarget, setOverrideTarget] = useState<OverrideTarget | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
   const [overrideError, setOverrideError] = useState<string | null>(null);
+  // Alasan penerusan hanya perlu sekali per analisa SLIK terbaru. Setelah
+  // tersimpan, gate di halaman tidak boleh memunculkan dialog lagi meski
+  // status pengajuan diubah berkali-kali (props server belum di-refresh).
+  const [overrideSatisfied, setOverrideSatisfied] = useState(false);
+  const slikGateActive = Boolean(slikGate?.active) && !overrideSatisfied;
   const [activeTab, setActiveTab] = useState<"summary" | "analysis" | "survey" | "decision" | "realization" | "history" | "documents">("summary");
   const [isSaving, setIsSaving] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -431,8 +436,10 @@ export function CreditApplicationDetailClientView({
       setApp(json.data);
       setDecisionData((prev) => ({ ...prev, status: json.data.status, statusChangeNote: "" }));
       showNotification("success", `Keputusan kredit status ${json.data.status} berhasil dicatat.`);
+      return true;
     } catch (e) {
       showNotification("error", e instanceof Error ? e.message : "");
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -458,7 +465,7 @@ export function CreditApplicationDetailClientView({
   };
 
   const handleQuickStatusTransition = async (nextStatus: string, defaultNote: string, slikOverrideReason = "") => {
-    if (!confirm(`Ubah status pengajuan menjadi "${nextStatus}"?`)) return;
+    if (!confirm(`Ubah status pengajuan menjadi "${nextStatus}"?`)) return false;
     setIsSaving(true);
     try {
       const res = await fetch(`/api/credit/applications/${app.id}`, {
@@ -474,8 +481,10 @@ export function CreditApplicationDetailClientView({
       if (!res.ok) throw new Error(json.error || "Gagal memperbarui status.");
       setApp(json.data);
       showNotification("success", `Status pengajuan berhasil diubah menjadi ${nextStatus}.`);
+      return true;
     } catch (e) {
       showNotification("error", e instanceof Error ? e.message : "");
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -483,10 +492,11 @@ export function CreditApplicationDetailClientView({
 
   /**
    * Tahap 5B: bila rekomendasi AI terakhir = REJECT dan pengajuan diteruskan,
-   * minta alasan penerusan (diisi Account Officer / petugas survei) lebih dulu.
+   * minta alasan penerusan (diisi Account Officer, petugas survei, verifikator,
+   * Super Admin, atau Direksi) lebih dulu.
    */
   const requestStatusTransition = (nextStatus: string, defaultNote: string) => {
-    if (!slikGate?.active || !isContinuationStatus(nextStatus)) {
+    if (!slikGateActive || !isContinuationStatus(nextStatus)) {
       void handleQuickStatusTransition(nextStatus, defaultNote);
       return;
     }
@@ -499,7 +509,7 @@ export function CreditApplicationDetailClientView({
   /** Versi ber-gate untuk pencatatan keputusan (APPROVED/RETURNED/REJECTED). */
   const requestSaveDecision = (statusOverride?: string) => {
     const targetStatus = statusOverride || decisionData.status;
-    if (!slikGate?.active || !isContinuationStatus(targetStatus)) {
+    if (!slikGateActive || !isContinuationStatus(targetStatus)) {
       void handleSaveDecision(statusOverride);
       return;
     }
@@ -522,9 +532,13 @@ export function CreditApplicationDetailClientView({
     setOverrideReason("");
     setOverrideError(null);
     if (target.kind === "transition") {
-      await handleQuickStatusTransition(target.nextStatus, target.defaultNote, reason);
+      if ((await handleQuickStatusTransition(target.nextStatus, target.defaultNote, reason)) === true) {
+        setOverrideSatisfied(true);
+      }
     } else {
-      await handleSaveDecision(target.statusOverride, reason);
+      if ((await handleSaveDecision(target.statusOverride, reason)) === true) {
+        setOverrideSatisfied(true);
+      }
     }
   };
 
@@ -945,13 +959,15 @@ export function CreditApplicationDetailClientView({
                 Wajib diverifikasi manual terhadap dokumen SLIK asli.
               </p>
               {/* Tahap 5B: gate penerusan meski rekomendasi AI = REJECT */}
-              {slikGate?.active && (
+              {slikGateActive && (
                 <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2.5 text-xs text-red-900 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <p className="leading-relaxed">
                     <span className="font-semibold">Rekomendasi AI terakhir: REJECT.</span>{" "}
                     Pengajuan hanya dapat dilanjutkan setelah{" "}
-                    <span className="font-semibold">Account Officer atau petugas survei lapangan</span>{" "}
+                    <span className="font-semibold">
+                      Account Officer, petugas survei lapangan, verifikator, Super Admin, atau Direksi
+                    </span>{" "}
                     mengisi alasan penerusan — dialognya muncul otomatis saat tombol lanjut/keputusan ditekan.
                   </p>
                 </div>
@@ -962,7 +978,7 @@ export function CreditApplicationDetailClientView({
                     Diteruskan meski rekomendasi AI REJECT
                   </p>
                   <p className="mt-1 leading-relaxed text-muted-foreground">
-                    {overrideRoleLabel(slikGate.override.recordedByRole === "SURVEY" ? "SURVEY" : "AO")}{" "}
+                    {overrideRoleLabel(slikGate.override.recordedByRole)}{" "}
                     ({slikGate.override.recordedByName}) ·{" "}
                     {new Date(slikGate.override.createdAt).toLocaleString("id-ID")}:{" "}
                     <span className="italic">{slikGate.override.reason}</span>
@@ -1057,14 +1073,14 @@ export function CreditApplicationDetailClientView({
                     {slikAnalyses.map((item) => (
                       <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 p-2.5">
                         <div className="min-w-0">
-                          <p className="flex flex-wrap items-center gap-1.5 truncate font-medium">
+                          <div className="flex flex-wrap items-center gap-1.5 truncate font-medium">
                             {new Date(item.createdAt).toLocaleString("id-ID")}
                             {item.linkedToApplication && (
                               <Badge variant="secondary" className="text-[10px]">
                                 Terkait pengajuan ini
                               </Badge>
                             )}
-                          </p>
+                          </div>
                           <p className="truncate text-muted-foreground">
                             {item.sourceFileNames?.join(", ") || "Laporan SLIK"}
                             {item.namaPadaDokumen ? ` · ${item.namaPadaDokumen}` : ""}
@@ -1133,7 +1149,7 @@ export function CreditApplicationDetailClientView({
                       );
                       return (
                         <div key={item.id} className="p-2.5">
-                          <p className="flex flex-wrap items-center gap-1.5 font-medium">
+                          <div className="flex flex-wrap items-center gap-1.5 font-medium">
                             {new Date(item.verifiedAt).toLocaleString("id-ID")} · {item.verifiedByName}
                             <Badge
                               variant={corrections.length ? "warning" : "outline"}
@@ -1141,7 +1157,7 @@ export function CreditApplicationDetailClientView({
                             >
                               {corrections.length ? `${corrections.length} koreksi` : "Sesuai dokumen"}
                             </Badge>
-                          </p>
+                          </div>
                           <p className="mt-1 leading-relaxed text-muted-foreground">
                             Konfirmasi — baki debet {formatRupiah(item.confirmedBakiDebet ?? 0)}, tunggakan{" "}
                             {formatRupiah(item.confirmedTunggakan ?? 0)}, kolektibilitas{" "}
@@ -1173,15 +1189,15 @@ export function CreditApplicationDetailClientView({
                   <div className="divide-y divide-border rounded-md border border-border bg-background text-xs">
                     {slikOverrides.map((item) => (
                       <div key={item.id} className="p-2.5">
-                        <p className="flex flex-wrap items-center gap-1.5 font-medium">
+                        <div className="flex flex-wrap items-center gap-1.5 font-medium">
                           {new Date(item.createdAt).toLocaleString("id-ID")} · {item.recordedByName}
                           <span className="text-muted-foreground">
-                            ({overrideRoleLabel(item.recordedByRole === "SURVEY" ? "SURVEY" : "AO")})
+                            ({overrideRoleLabel(item.recordedByRole)})
                           </span>
                           <Badge variant="outline" className="text-[10px]">
                             {item.rekomendasi}
                           </Badge>
-                        </p>
+                        </div>
                         <p className="mt-1 leading-relaxed italic text-muted-foreground">{item.reason}</p>
                       </div>
                     ))}
@@ -1913,8 +1929,8 @@ export function CreditApplicationDetailClientView({
               Analisa SLIK terakhir merekomendasikan{" "}
               <span className="font-semibold text-foreground">REJECT</span>. Untuk tetap melanjutkan ke
               tahap <span className="font-semibold text-foreground">{overrideTarget?.nextStatus}</span>,
-              Account Officer atau petugas survei lapangan wajib mengisi alasan penerusan. Alasan ini
-              disimpan permanen dan dicatat ke audit log.
+              Account Officer, petugas survei lapangan, verifikator, Super Admin, atau Direksi wajib
+              mengisi alasan penerusan. Alasan ini disimpan permanen dan dicatat ke audit log.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -1934,8 +1950,8 @@ export function CreditApplicationDetailClientView({
             />
             {overrideError && <p className="text-xs text-destructive">{overrideError}</p>}
             <p className="text-[11px] text-muted-foreground">
-              Hanya Account Officer / petugas survei lapangan yang berwenang mengisi — diverifikasi di
-              server, bukan hanya di tampilan.
+              Hanya Account Officer, petugas survei lapangan, verifikator, Super Admin, atau Direksi
+              yang berwenang mengisi — diverifikasi di server, bukan hanya di tampilan.
             </p>
           </div>
           <DialogFooter>

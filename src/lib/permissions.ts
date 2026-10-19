@@ -93,7 +93,7 @@ export async function hasPermission(
  * given permission codes. Useful for endpoints whose required permission depends
  * on the request payload (e.g. stock IN/OUT/ADJUST, workflow APPROVE/REJECT).
  */
-export async function requireAnyPermission(permissionCodes: string[]) {
+export async function requireAnyPermission(permissionCodes: string[], extraRoleCodes: string[] = []) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.email) {
@@ -131,6 +131,11 @@ export async function requireAnyPermission(permissionCodes: string[]) {
     if (await hasPermission(user.email, code)) {
       return { authorized: true as const, response: null, user };
     }
+  }
+
+  const allowedRoles = extraRoleCodes.map((code) => code.toUpperCase());
+  if (allowedRoles.length && user.userRoles.some((ur) => allowedRoles.includes(ur.role.code.toUpperCase()))) {
+    return { authorized: true as const, response: null, user };
   }
 
   return {

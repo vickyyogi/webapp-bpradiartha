@@ -78,7 +78,7 @@ export async function GET (req: NextRequest) {
       assignedCount: allOrgAssets.filter((a) => a.status === "ASSIGNED").length,
       maintenanceCount: allOrgAssets.filter((a) => a.status === "MAINTENANCE").length,
       disposedCount: allOrgAssets.filter((a) => a.status === "DISPOSED").length,
-      totalValue: allOrgAssets.reduce((acc, curr) => acc + (curr.purchasePrice || 0), 0),
+      totalValue: allOrgAssets.reduce((acc, curr) => acc + Number(curr.purchasePrice || 0), 0),
     };
 
     return NextResponse.json({ assets, summary });

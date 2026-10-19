@@ -244,7 +244,7 @@ export default async function CreditDashboardPage() {
                   </div>
                   <div className="text-right space-y-1">
                     <p className="text-sm font-semibold">
-                      {app.requestedAmount ? `Rp ${app.requestedAmount.toLocaleString("id-ID")}` : "-"}
+                      {app.requestedAmount ? `Rp ${Number(app.requestedAmount).toLocaleString("id-ID")}` : "-"}
                     </p>
                     <Badge variant={app.status === "APPROVED" ? "success" : app.status === "REJECTED" ? "destructive" : "info"} className="text-xs">
                       {app.status}

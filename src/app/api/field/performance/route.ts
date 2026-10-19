@@ -92,7 +92,7 @@ export async function GET (_req: NextRequest) {
         ]);
 
         const realizedAmount = realizedApplications.reduce(
-          (sum, a) => sum + (a.realizationAmount || a.approvedAmount || a.requestedAmount || 0),
+          (sum, a) => sum + Number(a.realizationAmount || a.approvedAmount || a.requestedAmount || 0),
           0
         );
 

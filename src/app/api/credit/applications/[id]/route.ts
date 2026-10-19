@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { Prisma, CreditApplicationStatus } from "@prisma/client";
-import { requireAuthAndPermission } from "@/lib/permissions";
+import { hasPermission, requireAnyPermission, requireAuthAndPermission } from "@/lib/permissions";
 import { buildScopeFilter, isBranchAllowed, toScopeUser, violatesSegregationOfDuties } from "@/lib/access-scope";
 import { extractClientInfo, logAudit } from "@/lib/audit";
 import {
@@ -94,7 +94,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authCheck = await requireAuthAndPermission("credit.application.update");
+    const authCheck = await requireAnyPermission(
+      ["credit.application.update", "credit.application.verify"],
+      ["DIRECTOR", "ADMIN"]
+    );
     if (!authCheck.authorized) {
       return authCheck.response;
     }
@@ -216,8 +219,9 @@ export async function PUT(
 
     if (isStatusChanged) {
       // Tahap 5B (P0.5): bila rekomendasi analisa AI terbaru = REJECT dan
-      // pengajuan tetap DITERUSKAN, alasan penerusan wajib diisi oleh Account
-      // Officer atau petugas survei lapangan — diverifikasi & dicatat di server.
+      // pengajuan tetap DITERUSKAN, alasan penerusan boleh diisi Account
+      // Officer, petugas survei lapangan, siapa pun yang berwenang
+      // memverifikasi pengajuan, Super Admin, atau Direksi.
       if (isContinuationStatus(status)) {
         const latestSlik = await db.slikAnalysisRecord.findFirst({
           where: { organizationId: currentUser.organizationId, customerId: existing.customerId },
@@ -232,12 +236,13 @@ export async function PUT(
           });
 
           if (!coveringOverride) {
-            const actorRole = resolveOverrideActor(currentUser, existing);
+            const canVerify = await hasPermission(currentUser.email!, "credit.application.verify");
+            const actorRole = resolveOverrideActor(currentUser, existing, { canVerify });
             if (!actorRole) {
               return NextResponse.json(
                 {
                   error:
-                    "Analisa SLIK terakhir merekomendasikan REJECT. Hanya Account Officer atau petugas survei lapangan yang dapat mengisi alasan penerusan pengajuan.",
+                    "Analisa SLIK terakhir merekomendasikan REJECT. Hanya Account Officer, petugas survei lapangan, verifikator, Super Admin, atau Direksi yang dapat mengisi alasan penerusan pengajuan.",
                   code: "SLIK_OVERRIDE_FORBIDDEN",
                 },
                 { status: 403 }
@@ -330,7 +335,9 @@ export async function PUT(
       }
 
       if (status === "APPROVED") {
-        const finalAmount = (updateData.approvedAmount as number | null) ?? existing.approvedAmount ?? existing.requestedAmount ?? 0;
+        const finalAmount = Number(
+          updateData.approvedAmount ?? existing.approvedAmount ?? existing.requestedAmount ?? 0
+        );
         const roleCodes = currentUser.userRoles.map((ur) => ur.role.code);
         const isSuperAdmin = roleCodes.includes("ADMIN") || roleCodes.includes("DIRECTOR");
 
@@ -348,10 +355,12 @@ export async function PUT(
             },
           });
 
-          const maxAllowed = Math.max(...userLimits.map((l) => l.maxAmount), 0);
+          const maxAllowed = Math.max(...userLimits.map((l) => Number(l.maxAmount)), 0);
           if (finalAmount <= maxAllowed) {
             hasAuthority = true;
-            const matchingLimit = userLimits.find((l) => finalAmount >= l.minAmount && finalAmount <= l.maxAmount);
+            const matchingLimit = userLimits.find(
+              (l) => finalAmount >= Number(l.minAmount) && finalAmount <= Number(l.maxAmount)
+            );
             if (matchingLimit) approverRoleTitle = matchingLimit.levelName;
           }
         }

@@ -354,7 +354,7 @@ model Customer {
   // Profil usaha/pekerjaan (opsional)
   occupation    String? @db.VarChar(150)
   employerName  String? @map("employer_name") @db.VarChar(200)
-  monthlyIncome Float?  @map("monthly_income") // nominal belum dimigrasikan ke Decimal pada tahap ini (P0.6 = Tahap 6)
+  monthlyIncome Decimal?  @map("monthly_income") @db.Decimal(18, 0) // Tahap 6 (P0.6): nominal rupiah presisi tetap
 
   // Jejak perubahan & verifikasi identitas (P0.2)
   createdById  String?   @map("created_by_id") @db.Uuid
@@ -498,7 +498,7 @@ model CreditApplication {
   applicationNumber          String                  @unique @db.VarChar(50)
   customerId                 String                  @map("customer_id") @db.Uuid
   product                    String?                 @db.VarChar(200)
-  requestedAmount            Float?
+  requestedAmount            Decimal? @db.Decimal(18, 0)
   requestedTenorMonths       Int?
   purpose                    String?                 @db.Text
   source                     String?                 @db.VarChar(100)
@@ -514,9 +514,9 @@ model CreditApplication {
   surveyData   Json? @map("survey_data")
 
   // Keputusan Komite Kredit
-  approvedAmount      Float?    @map("approved_amount")
+  approvedAmount      Decimal?    @map("approved_amount") @db.Decimal(18, 0)
   approvedTenorMonths Int?      @map("approved_tenor_months")
-  interestRate        Float?    @map("interest_rate")
+  interestRate        Decimal?    @map("interest_rate") @db.Decimal(6, 4)
   decisionDate        DateTime? @map("decision_date") @db.Timestamptz
   decisionMakerId     String?   @map("decision_maker_id") @db.Uuid
   decisionNotes       String?   @map("decision_notes") @db.Text
@@ -525,7 +525,7 @@ model CreditApplication {
   // Realisasi / Pencairan Kredit
   realizationDate      DateTime? @map("realization_date") @db.Timestamptz
   realizationReference String?   @map("realization_reference") @db.VarChar(100)
-  realizationAmount    Float?    @map("realization_amount")
+  realizationAmount    Decimal?    @map("realization_amount") @db.Decimal(18, 0)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
@@ -598,22 +598,22 @@ model SlikAnalysisRecord {
 /// Sebelum hasil AI dipakai dalam Analisis 5C, petugas membandingkan baki
 /// debet, tunggakan, dan kolektibilitas terhadap dokumen SLIK asli. Nilai AI
 /// (snapshot) dan nilai konfirmasi disimpan berdampingan: koreksi terekam
-/// berjejak, record hasil AI tidak pernah diubah. Float pada kolom nominal
-/// dipertahankan mengikuti status quo — migrasi Decimal di P0.6 (Tahap 6).
+/// berjejak, record hasil AI tidak pernah diubah. Nominal sudah Decimal
+/// (Tahap 6) agar pembandingan angka tidak terkena galat pembulatan Float.
 model SlikAnalysisVerification {
   id                   String   @id @default(uuid()) @db.Uuid
   organizationId       String   @map("organization_id") @db.Uuid
   slikAnalysisRecordId String?  @map("slik_analysis_record_id") @db.Uuid
 
   // Snapshot nilai AI saat diverifikasi (pembanding koreksi).
-  aiBakiDebet      Float?  @map("ai_baki_debet")
-  aiTunggakan      Float?  @map("ai_tunggakan")
+  aiBakiDebet      Decimal?  @map("ai_baki_debet") @db.Decimal(18, 0)
+  aiTunggakan      Decimal?  @map("ai_tunggakan") @db.Decimal(18, 0)
   aiKolektibilitas String? @map("ai_kolektibilitas") @db.VarChar(100)
 
   // Nilai yang dikonfirmasi petugas terhadap dokumen asli
   // (sama = konfirmasi murni; beda = koreksi, tercatat berjejak).
-  confirmedBakiDebet      Float?  @map("confirmed_baki_debet")
-  confirmedTunggakan      Float?  @map("confirmed_tunggakan")
+  confirmedBakiDebet      Decimal?  @map("confirmed_baki_debet") @db.Decimal(18, 0)
+  confirmedTunggakan      Decimal?  @map("confirmed_tunggakan") @db.Decimal(18, 0)
   confirmedKolektibilitas String? @map("confirmed_kolektibilitas") @db.VarChar(100)
 
   note           String?  @db.Text
@@ -673,8 +673,8 @@ model CreditApprovalLimit {
   organizationId String   @map("organization_id") @db.Uuid
   roleId         String   @map("role_id") @db.Uuid
   levelName      String   @map("level_name") @db.VarChar(100)
-  minAmount      Float    @default(0) @map("min_amount")
-  maxAmount      Float    @map("max_amount")
+  minAmount      Decimal    @default(0) @map("min_amount") @db.Decimal(18, 0)
+  maxAmount      Decimal    @map("max_amount") @db.Decimal(18, 0)
   tierOrder      Int      @default(1) @map("tier_order")
   isActive       Boolean  @default(true) @map("is_active")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
@@ -692,7 +692,7 @@ model CreditApprovalRecord {
   approverId          String                  @map("approver_id") @db.Uuid
   approverRoleName    String                  @map("approver_role_name") @db.VarChar(100)
   status              CreditApplicationStatus
-  approvedAmount      Float?                  @map("approved_amount")
+  approvedAmount      Decimal?                  @map("approved_amount") @db.Decimal(18, 0)
   notes               String?                 @db.Text
   createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz
 
@@ -823,7 +823,7 @@ model InventoryItem {
   currentStock    Int      @default(0) @map("current_stock")
   minStock        Int      @default(5) @map("min_stock")
   storageLocation String?  @map("storage_location") @db.VarChar(200)
-  unitPrice       Float?   @map("unit_price")
+  unitPrice       Decimal?   @map("unit_price") @db.Decimal(18, 0)
   notes           String?  @db.Text
   isActive        Boolean  @default(true) @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
@@ -885,7 +885,7 @@ model Asset {
   category        String         @db.VarChar(100) // e.g. IT Equipment, Office Furniture, Kendaraan Operasional, Elektronik
   serialNumber    String?        @map("serial_number") @db.VarChar(100)
   purchaseDate    DateTime?      @map("purchase_date") @db.Timestamptz
-  purchasePrice   Float?         @map("purchase_price")
+  purchasePrice   Decimal?         @map("purchase_price") @db.Decimal(18, 0)
   vendor          String?        @db.VarChar(200)
   warrantyExpiry  DateTime?      @map("warranty_expiry") @db.Timestamptz
   location        String?        @db.VarChar(200)
@@ -931,7 +931,7 @@ model AssetMaintenance {
   assetId        String    @map("asset_id") @db.Uuid
   title          String    @db.VarChar(200)
   description    String?   @db.Text
-  cost           Float?
+  cost           Decimal? @db.Decimal(18, 0)
   vendor         String?   @db.VarChar(200)
   technician     String?   @db.VarChar(150)
   startDate      DateTime? @map("start_date") @db.Timestamptz
@@ -995,7 +995,7 @@ model PurchaseRequest {
   purpose              String                @db.Text
   requiredDate         DateTime?             @map("required_date") @db.Timestamptz
   status               PurchaseRequestStatus @default(DRAFT)
-  totalEstimatedAmount Float                 @default(0) @map("total_estimated_amount")
+  totalEstimatedAmount Decimal                 @default(0) @map("total_estimated_amount") @db.Decimal(18, 0)
   notes                String?               @db.Text
   createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz
@@ -1019,8 +1019,8 @@ model PurchaseRequestItem {
   category          String?  @db.VarChar(100)
   unit              String   @db.VarChar(50)
   quantity          Int
-  estimatedPrice    Float    @map("estimated_price")
-  totalPrice        Float    @map("total_price")
+  estimatedPrice    Decimal    @map("estimated_price") @db.Decimal(18, 0)
+  totalPrice        Decimal    @map("total_price") @db.Decimal(18, 0)
   itemType          String   @default("INVENTORY") @map("item_type") @db.VarChar(50) // INVENTORY, ASSET, SERVICE
   inventoryItemId   String?  @map("inventory_item_id") @db.Uuid
   notes             String?  @db.Text
@@ -1050,9 +1050,9 @@ model PurchaseOrder {
   expectedDeliveryDate DateTime?           @map("expected_delivery_date") @db.Timestamptz
   paymentTerms         String?             @map("payment_terms") @db.VarChar(100)
   status               PurchaseOrderStatus @default(DRAFT)
-  subtotal             Float               @default(0)
-  taxAmount            Float               @default(0) @map("tax_amount")
-  totalAmount          Float               @default(0) @map("total_amount")
+  subtotal             Decimal               @default(0) @db.Decimal(18, 0)
+  taxAmount            Decimal               @default(0) @map("tax_amount") @db.Decimal(18, 0)
+  totalAmount          Decimal               @default(0) @map("total_amount") @db.Decimal(18, 0)
   notes                String?             @db.Text
   createdById          String              @map("created_by_id") @db.Uuid
   createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz
@@ -1077,8 +1077,8 @@ model PurchaseOrderItem {
   unit             String   @db.VarChar(50)
   quantityOrdered  Int      @map("quantity_ordered")
   quantityReceived Int      @default(0) @map("quantity_received")
-  unitPrice        Float    @map("unit_price")
-  totalPrice       Float    @map("total_price")
+  unitPrice        Decimal    @map("unit_price") @db.Decimal(18, 0)
+  totalPrice       Decimal    @map("total_price") @db.Decimal(18, 0)
   itemType         String   @default("INVENTORY") @map("item_type") @db.VarChar(50)
   inventoryItemId  String?  @map("inventory_item_id") @db.Uuid
   notes            String?  @db.Text
@@ -1162,8 +1162,8 @@ model WorkflowStep {
   stepOrder      Int      @map("step_order")
   name           String   @db.VarChar(200)
   approverRoleId String?  @map("approver_role_id") @db.Uuid
-  minAmount      Float    @default(0) @map("min_amount")
-  maxAmount      Float?   @map("max_amount")
+  minAmount      Decimal    @default(0) @map("min_amount") @db.Decimal(18, 0)
+  maxAmount      Decimal?   @map("max_amount") @db.Decimal(18, 0)
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   workflow     Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)

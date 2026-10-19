@@ -59,7 +59,7 @@ export async function GET (req: NextRequest) {
       submitted: allRequests.filter((r) => r.status === "SUBMITTED").length,
       approved: allRequests.filter((r) => r.status === "APPROVED").length,
       rejected: allRequests.filter((r) => r.status === "REJECTED").length,
-      totalAmount: allRequests.reduce((acc, curr) => acc + (curr.totalEstimatedAmount || 0), 0),
+      totalAmount: allRequests.reduce((acc, curr) => acc + Number(curr.totalEstimatedAmount || 0), 0),
     };
 
     return NextResponse.json({ requests, summary });

@@ -81,6 +81,12 @@ function logicTests(): void {
   check("alasan terlalu pendek ditolak", !isValidOverrideReason("pendek") && !isValidOverrideReason("") && !isValidOverrideReason(123));
   check("alasan wajar diterima", isValidOverrideReason("Tunggakan berasal dari fasilitas yang sudah lunas."));
   check("label peran benar", overrideRoleLabel("AO") === "Account Officer" && overrideRoleLabel("SURVEY") === "Petugas Survei Lapangan");
+  check(
+    "label peran baru benar",
+    overrideRoleLabel("VERIFIER") === "Verifikator" &&
+      overrideRoleLabel("ADMIN") === "Super Admin" &&
+      overrideRoleLabel("DIRECTOR") === "Direksi"
+  );
 
   const actor = { id: "user-1", userRoles: [{ role: { code: "CREDIT_ANALYST" } }] };
   check(
@@ -97,8 +103,17 @@ function logicTests(): void {
       resolveOverrideActor({ id: "u", userRoles: [{ role: { code: "FIELD_OFFICER" } }] }, {}) === "SURVEY"
   );
   check(
-    "analis/komite TIDAK berwenang mengisi alasan",
+    "analis tanpa izin verifikasi TIDAK berwenang mengisi alasan",
     resolveOverrideActor(actor, {}) === null
+  );
+  check(
+    "pemegang izin verifikasi berwenang mengisi alasan",
+    resolveOverrideActor(actor, {}, { canVerify: true }) === "VERIFIER"
+  );
+  check(
+    "Super Admin & Direksi berwenang mengisi alasan",
+    resolveOverrideActor({ id: "u", userRoles: [{ role: { code: "ADMIN" } }] }, {}) === "ADMIN" &&
+      resolveOverrideActor({ id: "u", userRoles: [{ role: { code: "DIRECTOR" } }] }, {}) === "DIRECTOR"
   );
 
   console.log("== 1c. Verifikasi manual angka ekstraksi AI ==");
@@ -228,8 +243,8 @@ async function dbTests(): Promise<void> {
       withFileTypes: true,
     }).filter((entry) => entry.isDirectory());
     check(
-      "jumlah folder migrasi = 23 (tidak ada migrasi hilang)",
-      migrations.length === 23,
+      "jumlah folder migrasi = 24 (tidak ada migrasi hilang)",
+      migrations.length === 24,
       `ditemukan ${migrations.length}`
     );
 
@@ -357,20 +372,20 @@ async function dbTests(): Promise<void> {
     );
     check(
       "snapshot nilai AI ikut tersimpan sebagai pembanding",
-      verificationBack?.aiBakiDebet === 1000000 && verificationBack?.aiKolektibilitas === "1"
+      Number(verificationBack?.aiBakiDebet) === 1000000 && verificationBack?.aiKolektibilitas === "1"
     );
     check(
       "koreksi terdeteksi (AI ≠ konfirmasi petugas)",
       verificationBack
         ? detectCorrections(
             {
-              bakiDebet: verificationBack.aiBakiDebet,
-              tunggakan: verificationBack.aiTunggakan,
+              bakiDebet: Number(verificationBack.aiBakiDebet),
+              tunggakan: Number(verificationBack.aiTunggakan),
               kolektibilitas: verificationBack.aiKolektibilitas,
             },
             {
-              bakiDebet: verificationBack.confirmedBakiDebet,
-              tunggakan: verificationBack.confirmedTunggakan,
+              bakiDebet: Number(verificationBack.confirmedBakiDebet),
+              tunggakan: Number(verificationBack.confirmedTunggakan),
               kolektibilitas: verificationBack.confirmedKolektibilitas,
             }
           ).length === 1

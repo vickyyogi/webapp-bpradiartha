@@ -13,8 +13,11 @@
 
 export const OVERRIDE_REASON_MIN_LENGTH = 10;
 
-/** Peran pelaku yang berwenang mengisi alasan penerusan. */
-export type SlikOverrideActorRole = "AO" | "SURVEY";
+/**
+ * Peran pelaku yang berwenang mengisi alasan penerusan: Account Officer,
+ * petugas survei, pemegang izin verifikasi pengajuan, Super Admin, dan Direksi.
+ */
+export type SlikOverrideActorRole = "AO" | "SURVEY" | "VERIFIER" | "ADMIN" | "DIRECTOR";
 
 /**
  * Status yang berarti pengajuan DITERUSKAN (bukan dikembalikan/ditolak).
@@ -29,17 +32,17 @@ export function isContinuationStatus(status: string): boolean {
  * Menentukan peran pelaku untuk pengisian alasan penerusan.
  *
  * Prioritas: penugasan pada pengajuan (Account Officer = marketing officer,
- * petugas survei = survey officer), lalu jatuh ke kode peran AO_MARKETING /
- * FIELD_OFFICER bila pengajuan belum menugaskan siapa pun. Pihak lain
- * (analis, komite, pemutus, dsb.) tidak berwenang — sesuai ketentuan bahwa
- * alasan diisi oleh survei lapangan atau account officer.
+ * petugas survei = survey officer), lalu kode peran AO_MARKETING /
+ * FIELD_OFFICER, Super Admin (ADMIN), Direksi (DIRECTOR), dan terakhir siapa
+ * pun yang memegang izin verifikasi pengajuan (`canVerify`).
  */
 export function resolveOverrideActor(
   actor: { id: string; userRoles?: { role: { code: string } }[] },
   application: {
     assignedMarketingOfficerId?: string | null;
     assignedSurveyOfficerId?: string | null;
-  }
+  },
+  options?: { canVerify?: boolean }
 ): SlikOverrideActorRole | null {
   if (application.assignedMarketingOfficerId && application.assignedMarketingOfficerId === actor.id) {
     return "AO";
@@ -48,13 +51,29 @@ export function resolveOverrideActor(
     return "SURVEY";
   }
   const codes = (actor.userRoles ?? []).map((ur) => ur.role.code.toUpperCase());
+  if (codes.includes("ADMIN")) return "ADMIN";
+  if (codes.includes("DIRECTOR")) return "DIRECTOR";
   if (codes.includes("AO_MARKETING")) return "AO";
   if (codes.includes("FIELD_OFFICER")) return "SURVEY";
+  if (options?.canVerify) return "VERIFIER";
   return null;
 }
 
-export function overrideRoleLabel(role: SlikOverrideActorRole): string {
-  return role === "AO" ? "Account Officer" : "Petugas Survei Lapangan";
+export function overrideRoleLabel(role: string): string {
+  switch (role) {
+    case "AO":
+      return "Account Officer";
+    case "SURVEY":
+      return "Petugas Survei Lapangan";
+    case "ADMIN":
+      return "Super Admin";
+    case "DIRECTOR":
+      return "Direksi";
+    case "VERIFIER":
+      return "Verifikator";
+    default:
+      return "Petugas";
+  }
 }
 
 /** Memvalidasi alasan penerusan (wajib, tidak kosong, panjang wajar). */

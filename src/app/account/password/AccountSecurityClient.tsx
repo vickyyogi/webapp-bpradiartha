@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { PasswordPolicyChecklist } from "@/components/account/PasswordPolicyChecklist";
@@ -142,9 +142,8 @@ export function AccountSecurityClient({
               <Label htmlFor="current-password" className="text-xs font-semibold text-foreground">
                 Kata Sandi Saat Ini
               </Label>
-              <Input
+              <PasswordInput
                 id="current-password"
-                type="password"
                 autoComplete="current-password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
@@ -156,9 +155,8 @@ export function AccountSecurityClient({
               <Label htmlFor="new-password" className="text-xs font-semibold text-foreground">
                 Kata Sandi Baru
               </Label>
-              <Input
+              <PasswordInput
                 id="new-password"
-                type="password"
                 autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -170,9 +168,8 @@ export function AccountSecurityClient({
               <Label htmlFor="ulangi-password" className="text-xs font-semibold text-foreground">
                 Ulangi Kata Sandi Baru
               </Label>
-              <Input
+              <PasswordInput
                 id="ulangi-password"
-                type="password"
                 autoComplete="new-password"
                 value={ulangi}
                 onChange={(e) => setUlangi(e.target.value)}

@@ -66,7 +66,7 @@ export async function GET (req: NextRequest) {
       issued: allOrders.filter((o) => o.status === "ISSUED").length,
       partial: allOrders.filter((o) => o.status === "PARTIAL_RECEIVED").length,
       completed: allOrders.filter((o) => o.status === "COMPLETED").length,
-      totalValue: allOrders.reduce((acc, curr) => acc + (curr.totalAmount || 0), 0),
+      totalValue: allOrders.reduce((acc, curr) => acc + Number(curr.totalAmount || 0), 0),
     };
 
     return NextResponse.json({ orders, summary });
@@ -113,7 +113,7 @@ export async function POST (req: NextRequest) {
       (sum: number, it) => sum + (Number(it.quantityOrdered) || 1) * (Number(it.unitPrice) || 0),
       0
     );
-    const taxAmount = includeTax ? subtotal * 0.11 : 0;
+    const taxAmount = includeTax ? Math.round(subtotal * 0.11) : 0;
     const totalAmount = subtotal + taxAmount;
 
     const newPO = await db.purchaseOrder.create({

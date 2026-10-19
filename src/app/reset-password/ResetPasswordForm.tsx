@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -100,9 +101,8 @@ export function ResetPasswordForm({ token, emailMasked }: { token: string; email
             <Label htmlFor="password" className="text-xs font-semibold text-foreground">
               Kata Sandi Baru
             </Label>
-            <Input
+            <PasswordInput
               id="password"
-              type="password"
               autoComplete="new-password"
               placeholder="••••••••••"
               value={password}
@@ -115,9 +115,8 @@ export function ResetPasswordForm({ token, emailMasked }: { token: string; email
             <Label htmlFor="ulangi" className="text-xs font-semibold text-foreground">
               Ulangi Kata Sandi Baru
             </Label>
-            <Input
+            <PasswordInput
               id="ulangi"
-              type="password"
               autoComplete="new-password"
               placeholder="••••••••••"
               value={ulangi}

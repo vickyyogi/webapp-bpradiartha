@@ -177,7 +177,8 @@ export default async function CreditApplicationDetailPage({
 
   // Tahap 5B (P0.5): status gate — bila analisa AI terbaru = REJECT dan belum
   // ada alasan penerusan yang menanggapinya, pengajuan hanya dapat dilanjutkan
-  // setelah Account Officer / petugas survei mengisi alasan.
+  // setelah Account Officer, petugas survei, verifikator, Super Admin, atau
+  // Direksi mengisi alasan.
   const slikOverrides = await db.creditSlikOverride.findMany({
     where: { organizationId: currentUser.organizationId, creditApplicationId: id },
     select: {
