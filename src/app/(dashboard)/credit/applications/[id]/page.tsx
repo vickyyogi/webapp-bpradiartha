@@ -237,6 +237,27 @@ export default async function CreditApplicationDetailPage({
     take: 100,
   });
 
+  // Tahap 9F: riwayat koreksi pasca-submit (audit trail) untuk ditampilkan.
+  const revisionLogs = await db.auditLog.findMany({
+    where: {
+      organizationId: currentUser.organizationId,
+      entityType: "CREDIT_APPLICATION",
+      entityId: id,
+      action: "UPDATE",
+    },
+    select: {
+      id: true,
+      action: true,
+      oldValues: true,
+      newValues: true,
+      notes: true,
+      createdAt: true,
+      user: { select: { fullName: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+  });
+
   return (
     <CreditApplicationDetailClientView
       application={JSON.parse(JSON.stringify(application))}
@@ -246,6 +267,7 @@ export default async function CreditApplicationDetailPage({
       initialSlikVerifications={JSON.parse(JSON.stringify(slikVerifications))}
       slikGate={JSON.parse(JSON.stringify(slikGate))}
       slikOverrides={JSON.parse(JSON.stringify(slikOverrides))}
+      revisionLogs={JSON.parse(JSON.stringify(revisionLogs))}
     />
   );
 }

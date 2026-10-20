@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
-import { logAudit, extractClientInfo } from "@/lib/audit";
+import { buildAuditLogData, extractClientInfo } from "@/lib/audit";
 import { hashPassword, validatePasswordPolicy } from "@/lib/password";
 
 export async function PUT(
@@ -76,6 +76,7 @@ export async function PUT(
         : {}),
     };
 
+    const clientInfo = extractClientInfo(req);
     const user = await db.$transaction(async (tx) => {
       if (roleIds !== undefined) {
         await tx.userRole.deleteMany({
@@ -92,7 +93,7 @@ export async function PUT(
         }
       }
 
-      return await tx.user.update({
+      const updated = await tx.user.update({
         where: { id, organizationId: currentUser.organizationId },
         data: dataToUpdate,
         include: {
@@ -105,25 +106,36 @@ export async function PUT(
           },
         },
       });
-    });
 
-    const clientInfo = extractClientInfo(req);
-    await logAudit({
-      organizationId: currentUser.organizationId,
-      userId: currentUser.id,
-      action: "UPDATE",
-      entityType: "USER",
-      entityId: user.id,
-      newValues: { email, fullName, phone, employeeNumber, branchId, departmentId, isActive, roleIds },
-      ipAddress: clientInfo.ipAddress,
-      userAgent: clientInfo.userAgent,
-      notes: `Mengubah data pengguna: ${fullName} (${email})`,
+      // Tahap 7 (P1.6): perubahan pengguna/role dan audit ditulis atomik.
+      await tx.auditLog.create({
+        data: buildAuditLogData({
+          organizationId: currentUser.organizationId,
+          userId: currentUser.id,
+          action: "UPDATE",
+          entityType: "USER",
+          entityId: updated.id,
+          oldValues: {
+            email: existing.email,
+            fullName: existing.fullName,
+            branchId: existing.branchId,
+            isActive: existing.isActive,
+            roleIds: existing.userRoles.map((row) => row.roleId),
+          },
+          newValues: { email, fullName, phone, employeeNumber, branchId, departmentId, isActive, roleIds },
+          ipAddress: clientInfo.ipAddress,
+          userAgent: clientInfo.userAgent,
+          notes: `Mengubah data pengguna: ${fullName} (${email})`,
+        }),
+      });
+
+      return updated;
     });
 
     return NextResponse.json(user);
   } catch (error) {
     console.error("PUT /api/users/[id] error:", error);
-    if (error.code === "P2002") {
+    if ((error as { code?: string })?.code === "P2002") {
       return NextResponse.json({ error: "Email sudah terdaftar" }, { status: 400 });
     }
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
@@ -155,24 +167,30 @@ export async function DELETE(
 
     const { id } = await params;
 
-    const user = await db.user.update({
-      where: { id, organizationId: currentUser.organizationId },
-      data: { isActive: false },
-    });
-
     const clientInfo = extractClientInfo(req);
-    await logAudit({
-      organizationId: currentUser.organizationId,
-      userId: currentUser.id,
-      action: "DELETE",
-      entityType: "USER",
-      entityId: user.id,
-      ipAddress: clientInfo.ipAddress,
-      userAgent: clientInfo.userAgent,
-      notes: `Menonaktifkan pengguna: ${user.fullName} (${user.email})`,
+    const user = await db.$transaction(async (tx) => {
+      const disabled = await tx.user.update({
+        where: { id, organizationId: currentUser.organizationId },
+        data: { isActive: false },
+      });
+      await tx.auditLog.create({
+        data: buildAuditLogData({
+          organizationId: currentUser.organizationId,
+          userId: currentUser.id,
+          action: "DELETE",
+          entityType: "USER",
+          entityId: disabled.id,
+          oldValues: { isActive: true },
+          newValues: { isActive: false },
+          ipAddress: clientInfo.ipAddress,
+          userAgent: clientInfo.userAgent,
+          notes: `Menonaktifkan pengguna: ${disabled.fullName} (${disabled.email})`,
+        }),
+      });
+      return disabled;
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, data: { id: user.id } });
   } catch (error) {
     console.error("DELETE /api/users/[id] error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

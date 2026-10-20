@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
-import { logAudit, extractClientInfo } from "@/lib/audit";
+import { buildAuditLogData, extractClientInfo } from "@/lib/audit";
 import { normalizeLoanProductAttributes } from "@/lib/credit-product";
 
 export async function PUT(
@@ -47,29 +47,36 @@ export async function PUT(
       attributes = normalized.attributes;
     }
 
-    const updated = await db.masterItem.update({
-      where: { id },
-      data: {
-        name: body.name !== undefined ? body.name : existing.name,
-        description: body.description !== undefined ? body.description : existing.description,
-        attributes,
-        sortOrder: body.sortOrder !== undefined ? Number(body.sortOrder) : existing.sortOrder,
-        isActive: body.isActive !== undefined ? Boolean(body.isActive) : existing.isActive,
-      },
-    });
-
     const clientInfo = extractClientInfo(req);
-    await logAudit({
-      organizationId: currentUser.organizationId,
-      userId: currentUser.id,
-      action: "UPDATE",
-      entityType: "MASTER_DATA",
-      entityId: id,
-      oldValues: existing,
-      newValues: updated,
-      ipAddress: clientInfo.ipAddress,
-      userAgent: clientInfo.userAgent,
-      notes: `Memperbarui Master Data [${updated.category}]: ${updated.code} - ${updated.name}`,
+    // Tahap 7 (P1.6): perubahan master data + audit ditulis atomik.
+    const updated = await db.$transaction(async (tx) => {
+      const saved = await tx.masterItem.update({
+        where: { id },
+        data: {
+          name: body.name !== undefined ? body.name : existing.name,
+          description: body.description !== undefined ? body.description : existing.description,
+          attributes,
+          sortOrder: body.sortOrder !== undefined ? Number(body.sortOrder) : existing.sortOrder,
+          isActive: body.isActive !== undefined ? Boolean(body.isActive) : existing.isActive,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: buildAuditLogData({
+          organizationId: currentUser.organizationId,
+          userId: currentUser.id,
+          action: "UPDATE",
+          entityType: "MASTER_DATA",
+          entityId: id,
+          oldValues: existing,
+          newValues: saved,
+          ipAddress: clientInfo.ipAddress,
+          userAgent: clientInfo.userAgent,
+          notes: `Memperbarui Master Data [${saved.category}]: ${saved.code} - ${saved.name}`,
+        }),
+      });
+
+      return saved;
     });
 
     return NextResponse.json(updated);
@@ -108,19 +115,22 @@ export async function DELETE(
       return NextResponse.json({ error: "Item master data tidak ditemukan" }, { status: 404 });
     }
 
-    await db.masterItem.delete({ where: { id } });
-
     const clientInfo = extractClientInfo(req);
-    await logAudit({
-      organizationId: currentUser.organizationId,
-      userId: currentUser.id,
-      action: "DELETE",
-      entityType: "MASTER_DATA",
-      entityId: id,
-      oldValues: existing,
-      ipAddress: clientInfo.ipAddress,
-      userAgent: clientInfo.userAgent,
-      notes: `Menghapus Master Data [${existing.category}]: ${existing.code} - ${existing.name}`,
+    await db.$transaction(async (tx) => {
+      await tx.masterItem.delete({ where: { id } });
+      await tx.auditLog.create({
+        data: buildAuditLogData({
+          organizationId: currentUser.organizationId,
+          userId: currentUser.id,
+          action: "DELETE",
+          entityType: "MASTER_DATA",
+          entityId: id,
+          oldValues: existing,
+          ipAddress: clientInfo.ipAddress,
+          userAgent: clientInfo.userAgent,
+          notes: `Menghapus Master Data [${existing.category}]: ${existing.code} - ${existing.name}`,
+        }),
+      });
     });
 
     return NextResponse.json({ success: true });

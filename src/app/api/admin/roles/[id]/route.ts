@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
-import { logAudit, extractClientInfo } from "@/lib/audit";
+import { buildAuditLogData, extractClientInfo } from "@/lib/audit";
 
 export async function PUT(
   req: NextRequest,
@@ -37,43 +37,47 @@ export async function PUT(
       return NextResponse.json({ error: "Peran tidak ditemukan" }, { status: 404 });
     }
 
-    // Delete existing permissions then recreate
-    await db.rolePermission.deleteMany({
-      where: { roleId: id },
-    });
-
-    const updatedRole = await db.role.update({
-      where: { id },
-      data: {
-        name,
-        description: description || null,
-        permissions: {
-          create: Array.isArray(permissionIds)
-            ? permissionIds.map((permId: string) => ({
-                permissionId: permId,
-              }))
-            : [],
-        },
-      },
-      include: {
-        permissions: {
-          include: { permission: true },
-        },
-      },
-    });
-
     const clientInfo = extractClientInfo(req);
-    await logAudit({
-      organizationId: currentUser.organizationId,
-      userId: currentUser.id,
-      action: "UPDATE",
-      entityType: "ROLE",
-      entityId: id,
-      oldValues: { name: existingRole.name, description: existingRole.description },
-      newValues: { name, description, permissionIds },
-      ipAddress: clientInfo.ipAddress,
-      userAgent: clientInfo.userAgent,
-      notes: `Mengubah peran: ${existingRole.code}`,
+    // Tahap 7 (P1.6): perubahan izin peran + audit ditulis atomik.
+    const updatedRole = await db.$transaction(async (tx) => {
+      await tx.rolePermission.deleteMany({ where: { roleId: id } });
+
+      const updated = await tx.role.update({
+        where: { id },
+        data: {
+          name,
+          description: description || null,
+          permissions: {
+            create: Array.isArray(permissionIds)
+              ? permissionIds.map((permId: string) => ({
+                  permissionId: permId,
+                }))
+              : [],
+          },
+        },
+        include: {
+          permissions: {
+            include: { permission: true },
+          },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: buildAuditLogData({
+          organizationId: currentUser.organizationId,
+          userId: currentUser.id,
+          action: "UPDATE",
+          entityType: "ROLE",
+          entityId: id,
+          oldValues: { name: existingRole.name, description: existingRole.description },
+          newValues: { name, description, permissionIds },
+          ipAddress: clientInfo.ipAddress,
+          userAgent: clientInfo.userAgent,
+          notes: `Mengubah peran: ${existingRole.code}`,
+        }),
+      });
+
+      return updated;
     });
 
     return NextResponse.json(updatedRole);
@@ -129,25 +133,23 @@ export async function DELETE(
       return NextResponse.json({ error: "Peran masih digunakan oleh pengguna" }, { status: 400 });
     }
 
-    await db.rolePermission.deleteMany({
-      where: { roleId: id },
-    });
-
-    await db.role.delete({
-      where: { id },
-    });
-
     const clientInfo = extractClientInfo(req);
-    await logAudit({
-      organizationId: currentUser.organizationId,
-      userId: currentUser.id,
-      action: "DELETE",
-      entityType: "ROLE",
-      entityId: id,
-      oldValues: { code: existingRole.code, name: existingRole.name },
-      ipAddress: clientInfo.ipAddress,
-      userAgent: clientInfo.userAgent,
-      notes: `Menghapus peran: ${existingRole.code}`,
+    await db.$transaction(async (tx) => {
+      await tx.rolePermission.deleteMany({ where: { roleId: id } });
+      await tx.role.delete({ where: { id } });
+      await tx.auditLog.create({
+        data: buildAuditLogData({
+          organizationId: currentUser.organizationId,
+          userId: currentUser.id,
+          action: "DELETE",
+          entityType: "ROLE",
+          entityId: id,
+          oldValues: { code: existingRole.code, name: existingRole.name },
+          ipAddress: clientInfo.ipAddress,
+          userAgent: clientInfo.userAgent,
+          notes: `Menghapus peran: ${existingRole.code}`,
+        }),
+      });
     });
 
     return NextResponse.json({ success: true });

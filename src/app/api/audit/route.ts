@@ -79,11 +79,19 @@ export async function GET (req: NextRequest) {
       where: { organizationId: currentUser.organizationId },
     });
 
-    return NextResponse.json({
-      logs,
-      totalCount,
-      count: logs.length,
-    });
+    return NextResponse.json(
+      {
+        logs,
+        totalCount,
+        count: logs.length,
+      },
+      {
+        headers: {
+          // Jejak audit tidak boleh disimpan cache perantara/browser.
+          "Cache-Control": "private, no-store, max-age=0",
+        },
+      }
+    );
   } catch (error) {
     console.error("GET /api/audit error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

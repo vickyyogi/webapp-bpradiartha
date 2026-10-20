@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
 import { buildScopeFilter, toScopeUser } from "@/lib/access-scope";
+import { extractClientInfo, logAudit } from "@/lib/audit";
 
 export async function GET (req: NextRequest) {
   try {
@@ -124,10 +125,35 @@ export async function GET (req: NextRequest) {
         csvContent += `"Total Nilai Stok ATK","${inventoryItems.length}","${inventoryItems.reduce((s, i) => s + Number(i.unitPrice || 0) * i.currentStock, 0)}"\n`;
       }
 
+      // Tahap 7 (P1.6): ekspor data wajib berjejak audit. Metadata saja;
+      // isi CSV dan PII tidak pernah masuk log.
+      const rowCount =
+        domain === "CREDIT"
+          ? creditApps.length
+          : domain === "PURCHASING"
+          ? purchaseOrders.length
+          : domain === "INVENTORY"
+          ? inventoryItems.length
+          : domain === "ASSET"
+          ? assets.length
+          : creditApps.length + purchaseOrders.length + inventoryItems.length + assets.length;
+
+      await logAudit({
+        organizationId: currentUser.organizationId,
+        userId: currentUser.id,
+        action: "EXPORT",
+        entityType: "REPORT",
+        entityId: filename,
+        ...extractClientInfo(req),
+        newValues: { format: "csv", domain, rowCount },
+        notes: `Ekspor CSV laporan domain ${domain} (${rowCount} baris).`,
+      });
+
       return new NextResponse(csvContent, {
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
           "Content-Disposition": `attachment; filename="${filename}"`,
+          "Cache-Control": "private, no-store, max-age=0",
         },
       });
     }

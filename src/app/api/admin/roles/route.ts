@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
-import { logAudit, extractClientInfo } from "@/lib/audit";
+import { buildAuditLogData, extractClientInfo } from "@/lib/audit";
 
 export async function GET (req: NextRequest) {
   try {
@@ -70,38 +70,44 @@ export async function POST (req: NextRequest) {
       return NextResponse.json({ error: "Kode peran sudah digunakan" }, { status: 400 });
     }
 
-    const role = await db.role.create({
-      data: {
-        code,
-        name,
-        description: description || null,
-        isSystem: false,
-        permissions: {
-          create: Array.isArray(permissionIds)
-            ? permissionIds.map((id: string) => ({
-                permissionId: id,
-              }))
-            : [],
-        },
-      },
-      include: {
-        permissions: {
-          include: { permission: true },
-        },
-      },
-    });
-
     const clientInfo = extractClientInfo(req);
-    await logAudit({
-      organizationId: currentUser.organizationId,
-      userId: currentUser.id,
-      action: "CREATE",
-      entityType: "ROLE",
-      entityId: role.id,
-      newValues: { code, name, description, permissionIds },
-      ipAddress: clientInfo.ipAddress,
-      userAgent: clientInfo.userAgent,
-      notes: `Menambahkan peran: ${code} - ${name}`,
+    // Tahap 7 (P1.6): pembuatan peran + izin + audit ditulis atomik.
+    const role = await db.$transaction(async (tx) => {
+      const created = await tx.role.create({
+        data: {
+          code,
+          name,
+          description: description || null,
+          isSystem: false,
+          permissions: {
+            create: Array.isArray(permissionIds)
+              ? permissionIds.map((id: string) => ({
+                  permissionId: id,
+                }))
+              : [],
+          },
+        },
+        include: {
+          permissions: {
+            include: { permission: true },
+          },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: buildAuditLogData({
+          organizationId: currentUser.organizationId,
+          userId: currentUser.id,
+          action: "CREATE",
+          entityType: "ROLE",
+          entityId: created.id,
+          newValues: { code, name, description, permissionIds },
+          ...clientInfo,
+          notes: `Menambahkan peran: ${code} - ${name}`,
+        }),
+      });
+
+      return created;
     });
 
     return NextResponse.json(role, { status: 201 });

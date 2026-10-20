@@ -243,8 +243,8 @@ async function dbTests(): Promise<void> {
       withFileTypes: true,
     }).filter((entry) => entry.isDirectory());
     check(
-      "jumlah folder migrasi = 24 (tidak ada migrasi hilang)",
-      migrations.length === 24,
+      "jumlah folder migrasi = 25 (tidak ada migrasi hilang)",
+      migrations.length === 25,
       `ditemukan ${migrations.length}`
     );
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission, requireAnyPermission } from "@/lib/permissions";
-import { logAudit, extractClientInfo } from "@/lib/audit";
+import { buildAuditLogData, extractClientInfo } from "@/lib/audit";
 import { normalizeLoanProductAttributes } from "@/lib/credit-product";
 
 export async function GET (req: NextRequest) {
@@ -77,30 +77,36 @@ export async function POST (req: NextRequest) {
       return NextResponse.json({ error: `Kode '${code}' sudah terdaftar pada kategori '${category}'` }, { status: 400 });
     }
 
-    const item = await db.masterItem.create({
-      data: {
-        organizationId: currentUser.organizationId,
-        category,
-        code: code.trim().toUpperCase(),
-        name,
-        description: description || null,
-        attributes: normalizedAttributes,
-        sortOrder: Number(sortOrder) || 0,
-        isActive: isActive !== undefined ? Boolean(isActive) : true,
-      },
-    });
-
     const clientInfo = extractClientInfo(req);
-    await logAudit({
-      organizationId: currentUser.organizationId,
-      userId: currentUser.id,
-      action: "CREATE",
-      entityType: "MASTER_DATA",
-      entityId: item.id,
-      newValues: item,
-      ipAddress: clientInfo.ipAddress,
-      userAgent: clientInfo.userAgent,
-      notes: `Menambahkan Master Data [${item.category}]: ${item.code} - ${item.name}`,
+    // Tahap 7 (P1.6): master data + audit ditulis atomik.
+    const item = await db.$transaction(async (tx) => {
+      const created = await tx.masterItem.create({
+        data: {
+          organizationId: currentUser.organizationId,
+          category,
+          code: code.trim().toUpperCase(),
+          name,
+          description: description || null,
+          attributes: normalizedAttributes,
+          sortOrder: Number(sortOrder) || 0,
+          isActive: isActive !== undefined ? Boolean(isActive) : true,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: buildAuditLogData({
+          organizationId: currentUser.organizationId,
+          userId: currentUser.id,
+          action: "CREATE",
+          entityType: "MASTER_DATA",
+          entityId: created.id,
+          newValues: created,
+          notes: `Menambahkan Master Data [${created.category}]: ${created.code} - ${created.name}`,
+          ...clientInfo,
+        }),
+      });
+
+      return created;
     });
 
     return NextResponse.json(item, { status: 201 });

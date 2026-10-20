@@ -2,11 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
-import { Prisma, CreditApplicationStatus } from "@prisma/client";
+import { Prisma, CreditApplicationStatus, DocumentType } from "@prisma/client";
 import { hasPermission, requireAnyPermission, requireAuthAndPermission } from "@/lib/permissions";
 import { buildScopeFilter, isBranchAllowed, toScopeUser, violatesSegregationOfDuties } from "@/lib/access-scope";
 import { extractClientInfo, logAudit } from "@/lib/audit";
 import { listActiveCreditProducts, validateCreditRequestAgainstProduct } from "@/lib/credit-product";
+import {
+  effectiveLimitsForBranch,
+  missingRequiredDocuments,
+  normalizeCommitteeDecision,
+  requiredDocumentsForProduct,
+  validateChecklistUpdate,
+  validateDisbursementReady,
+  validateReturnReason,
+  validateStandardAnalysis,
+  validateStandardSurvey,
+} from "@/lib/credit-governance";
 import {
   isContinuationStatus,
   isValidOverrideReason,
@@ -75,6 +86,9 @@ export async function GET(
           include: { approver: { select: { id: true, fullName: true, email: true } } },
           orderBy: { createdAt: "desc" },
         },
+        documentChecklist: { orderBy: { documentType: "asc" } },
+        committeeDecisions: { orderBy: { decidedAt: "desc" } },
+        disbursementConditions: { orderBy: { sortOrder: "asc" } },
       },
     });
 
@@ -148,6 +162,10 @@ export async function PUT(
       realizationReference,
       realizationAmount,
       statusChangeNote,
+      returnReason,
+      documentChecklist,
+      committeeDecision,
+      disbursementConditions,
     } = body;
 
     // Cakupan cabang: pengguna bercakupan cabang tidak boleh memindahkan ke cabang lain.
@@ -180,6 +198,161 @@ export async function PUT(
       );
       if (productError) {
         return NextResponse.json({ error: productError, code: "CREDIT_PRODUCT_INVALID" }, { status: 400 });
+      }
+    }
+
+    const products = await listActiveCreditProducts(currentUser.organizationId);
+    const finalProduct = product !== undefined ? product : existing.product;
+    const requiredDocuments = requiredDocumentsForProduct(products, finalProduct);
+
+    // Tahap 9C: checklist berkas. Item wajib dari produk tidak boleh dihapus;
+    // item yang belum ada dibuat otomatis (unchecked) agar gate berikutnya jujur.
+    const existingChecklist = await db.creditDocumentChecklist.findMany({
+      where: { organizationId: currentUser.organizationId, creditApplicationId: id },
+      select: { documentType: true, isRequired: true, isChecked: true },
+    });
+
+    let checklistForGate = existingChecklist.map((item) => ({
+      documentType: item.documentType as string,
+      isRequired: item.isRequired,
+      isChecked: item.isChecked,
+    }));
+
+    const missingChecklistRows = requiredDocuments.filter(
+      (doc) => !existingChecklist.some((item) => item.documentType === doc)
+    );
+
+    if (documentChecklist !== undefined) {
+      if (!Array.isArray(documentChecklist)) {
+        return NextResponse.json(
+          { error: "Checklist dokumen harus berupa daftar.", code: "DOCUMENT_CHECKLIST_INVALID" },
+          { status: 400 }
+        );
+      }
+      const present = new Set(
+        documentChecklist.map((item: { documentType?: unknown }) => String(item?.documentType ?? "").toUpperCase())
+      );
+      const merged = [
+        ...documentChecklist,
+        ...requiredDocuments
+          .filter((doc) => !present.has(doc))
+          .map((documentType) => ({ documentType, isChecked: false })),
+      ];
+      const validated = validateChecklistUpdate(existingChecklist, merged, requiredDocuments);
+      if (validated.error) {
+        return NextResponse.json(
+          { error: validated.error, code: "DOCUMENT_CHECKLIST_INVALID" },
+          { status: 400 }
+        );
+      }
+
+      for (const item of validated.items) {
+        await db.creditDocumentChecklist.upsert({
+          where: {
+            creditApplicationId_documentType: {
+              creditApplicationId: id,
+              documentType: item.documentType as DocumentType,
+            },
+          },
+          create: {
+            organizationId: currentUser.organizationId,
+            creditApplicationId: id,
+            documentType: item.documentType as DocumentType,
+            isRequired: item.isRequired,
+            isChecked: item.isChecked,
+            note: item.note ?? null,
+            checkedById: item.isChecked ? currentUser.id : null,
+            checkedByName: item.isChecked ? currentUser.fullName : null,
+            checkedAt: item.isChecked ? new Date() : null,
+          },
+          update: {
+            isRequired: item.isRequired,
+            isChecked: item.isChecked,
+            note: item.note ?? null,
+            checkedById: item.isChecked ? currentUser.id : null,
+            checkedByName: item.isChecked ? currentUser.fullName : null,
+            checkedAt: item.isChecked ? new Date() : null,
+          },
+        });
+      }
+      checklistForGate = validated.items.map((item) => ({
+        documentType: item.documentType,
+        isRequired: item.isRequired,
+        isChecked: Boolean(item.isChecked),
+      }));
+    } else if (missingChecklistRows.length > 0) {
+      await db.creditDocumentChecklist.createMany({
+        data: missingChecklistRows.map((documentType) => ({
+          organizationId: currentUser.organizationId,
+          creditApplicationId: id,
+          documentType: documentType as DocumentType,
+          isRequired: true,
+        })),
+        skipDuplicates: true,
+      });
+      checklistForGate = [
+        ...checklistForGate,
+        ...missingChecklistRows.map((documentType) => ({
+          documentType,
+          isRequired: true,
+          isChecked: false,
+        })),
+      ];
+    }
+
+    // Tahap 9D: formulir analisis & survei terstandardisasi divalidasi saat
+    // disimpan. Formulir lama yang belum lengkap tetap dapat dibaca, tetapi
+    // tidak dapat disimpan ulang sebagian.
+    if (analysisData !== undefined) {
+      const analysisError = validateStandardAnalysis(analysisData);
+      if (analysisError) {
+        return NextResponse.json({ error: analysisError, code: "ANALYSIS_INCOMPLETE" }, { status: 400 });
+      }
+    }
+    if (surveyData !== undefined) {
+      const surveyError = validateStandardSurvey(surveyData);
+      if (surveyError) {
+        return NextResponse.json({ error: surveyError, code: "SURVEY_INCOMPLETE" }, { status: 400 });
+      }
+    }
+
+    // Tahap 9E: risalah komite. Kuorum dihitung server dari peserta hadir.
+    let normalizedCommittee: ReturnType<typeof normalizeCommitteeDecision>["value"] = null;
+    if (committeeDecision !== undefined && committeeDecision !== null) {
+      const parsed = normalizeCommitteeDecision(committeeDecision);
+      if (parsed.error || !parsed.value) {
+        return NextResponse.json(
+          { error: parsed.error ?? "Risalah komite tidak valid.", code: "COMMITTEE_INVALID" },
+          { status: 400 }
+        );
+      }
+      if (status !== undefined && status !== parsed.value.decision) {
+        return NextResponse.json(
+          {
+            error: "Keputusan pada risalah komite harus sama dengan status pengajuan yang disimpan.",
+            code: "COMMITTEE_STATUS_MISMATCH",
+          },
+          { status: 400 }
+        );
+      }
+      normalizedCommittee = parsed.value;
+    }
+
+    // Tahap 9F: syarat pencairan terstruktur.
+    if (disbursementConditions !== undefined) {
+      if (!Array.isArray(disbursementConditions)) {
+        return NextResponse.json(
+          { error: "Syarat pencairan harus berupa daftar.", code: "DISBURSEMENT_CONDITIONS_INVALID" },
+          { status: 400 }
+        );
+      }
+      for (const condition of disbursementConditions) {
+        if (!condition || typeof condition !== "object" || !String(condition.description ?? "").trim()) {
+          return NextResponse.json(
+            { error: "Setiap syarat pencairan wajib memiliki uraian.", code: "DISBURSEMENT_CONDITIONS_INVALID" },
+            { status: 400 }
+          );
+        }
       }
     }
 
@@ -239,6 +412,63 @@ export async function PUT(
     let slikOverrideNote = "";
 
     if (isStatusChanged) {
+      const targetStatus = status as CreditApplicationStatus;
+
+      // Tahap 9C: alasan pengembalian wajib, tervalidasi server.
+      if (targetStatus === CreditApplicationStatus.RETURNED) {
+        const returnError = validateReturnReason(returnReason);
+        if (returnError) {
+          return NextResponse.json(
+            { error: returnError, code: "RETURN_REASON_REQUIRED" },
+            { status: 400 }
+          );
+        }
+      }
+
+      // Tahap 9C: berkas wajib produk harus lengkap sebelum analisis/putusan.
+      const checklistGateStatuses: CreditApplicationStatus[] = [
+        CreditApplicationStatus.ANALYSIS,
+        CreditApplicationStatus.SURVEY,
+        CreditApplicationStatus.REVIEW,
+        CreditApplicationStatus.DECISION,
+        CreditApplicationStatus.APPROVED,
+        CreditApplicationStatus.REJECTED,
+      ];
+      if (checklistGateStatuses.includes(targetStatus)) {
+        const missing = missingRequiredDocuments(checklistForGate);
+        if (missing.length > 0) {
+          return NextResponse.json(
+            {
+              error: `Checklist berkas wajib belum lengkap: ${missing.join(", ")}.`,
+              code: "DOCUMENT_CHECKLIST_INCOMPLETE",
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      // Tahap 9D: keputusan hanya boleh diambil setelah formulir analisis
+      // (dan survei bila ada) terisi lengkap sesuai standar.
+      const decisionGateStatuses: CreditApplicationStatus[] = [
+        CreditApplicationStatus.DECISION,
+        CreditApplicationStatus.APPROVED,
+        CreditApplicationStatus.REJECTED,
+      ];
+      if (decisionGateStatuses.includes(targetStatus)) {
+        const finalAnalysis = analysisData !== undefined ? analysisData : existing.analysisData;
+        const analysisError = validateStandardAnalysis(finalAnalysis);
+        if (analysisError) {
+          return NextResponse.json({ error: analysisError, code: "ANALYSIS_INCOMPLETE" }, { status: 400 });
+        }
+        const finalSurvey = surveyData !== undefined ? surveyData : existing.surveyData;
+        if (existing.assignedSurveyOfficerId || finalSurvey) {
+          const surveyError = validateStandardSurvey(finalSurvey);
+          if (surveyError) {
+            return NextResponse.json({ error: surveyError, code: "SURVEY_INCOMPLETE" }, { status: 400 });
+          }
+        }
+      }
+
       // Tahap 5B (P0.5): bila rekomendasi analisa AI terbaru = REJECT dan
       // pengajuan tetap DITERUSKAN, alasan penerusan boleh diisi Account
       // Officer, petugas survei lapangan, siapa pun yang berwenang
@@ -373,13 +603,18 @@ export async function PUT(
               organizationId: currentUser.organizationId,
               roleId: { in: currentUser.userRoles.map((ur) => ur.roleId) },
               isActive: true,
+              // Tahap 9B: limit cabang hanya berlaku untuk pengajuan cabang itu;
+              // limit tanpa cabang = organisasi (fallback).
+              OR: [{ branchId: null }, ...(existing.branchId ? [{ branchId: existing.branchId }] : [])],
             },
           });
 
-          const maxAllowed = Math.max(...userLimits.map((l) => Number(l.maxAmount)), 0);
+          // Limit khusus cabang menggantikan limit organisasi untuk cabang itu.
+          const effectiveLimits = effectiveLimitsForBranch(userLimits, existing.branchId);
+          const maxAllowed = Math.max(...effectiveLimits.map((l) => Number(l.maxAmount)), 0);
           if (finalAmount <= maxAllowed) {
             hasAuthority = true;
-            const matchingLimit = userLimits.find(
+            const matchingLimit = effectiveLimits.find(
               (l) => finalAmount >= Number(l.minAmount) && finalAmount <= Number(l.maxAmount)
             );
             if (matchingLimit) approverRoleTitle = matchingLimit.levelName;
@@ -387,14 +622,19 @@ export async function PUT(
         }
 
         if (!hasAuthority) {
-          const requiredLimit = await db.creditApprovalLimit.findFirst({
+          const requiredLimits = await db.creditApprovalLimit.findMany({
             where: {
               organizationId: currentUser.organizationId,
               minAmount: { lte: finalAmount },
               maxAmount: { gte: finalAmount },
               isActive: true,
+              OR: [{ branchId: null }, ...(existing.branchId ? [{ branchId: existing.branchId }] : [])],
             },
+            orderBy: { tierOrder: "asc" },
           });
+          const requiredLimit =
+            requiredLimits.find((limit) => existing.branchId && limit.branchId === existing.branchId) ??
+            requiredLimits.find((limit) => !limit.branchId);
 
           const requiredName = requiredLimit?.levelName || "Tingkat Direksi / Komite Pusat";
           return NextResponse.json(
@@ -404,6 +644,35 @@ export async function PUT(
             { status: 403 }
           );
         }
+      }
+    }
+
+    // Tahap 9F: pencairan hanya boleh dicatat bila referensi CBS diisi dan
+    // seluruh syarat terstruktur sudah dipenuhi.
+    if (realizationDate !== undefined && realizationDate) {
+      const finalReference =
+        realizationReference !== undefined ? realizationReference : existing.realizationReference;
+      if (!finalReference || !String(finalReference).trim()) {
+        return NextResponse.json(
+          { error: "Referensi transaksi CBS wajib diisi sebelum pencairan dicatat.", code: "CBS_REFERENCE_REQUIRED" },
+          { status: 400 }
+        );
+      }
+      const conditionsForGate =
+        disbursementConditions !== undefined
+          ? disbursementConditions.map((item: { description: string; isSatisfied?: boolean }) => ({
+              description: String(item.description).trim(),
+              isSatisfied: Boolean(item.isSatisfied),
+            }))
+          : (
+              await db.creditDisbursementCondition.findMany({
+                where: { organizationId: currentUser.organizationId, creditApplicationId: id },
+                select: { description: true, isSatisfied: true },
+              })
+            );
+      const readyError = validateDisbursementReady(conditionsForGate);
+      if (readyError) {
+        return NextResponse.json({ error: readyError, code: "DISBURSEMENT_CONDITIONS_PENDING" }, { status: 400 });
       }
     }
 
@@ -417,7 +686,13 @@ export async function PUT(
                 create: {
                   status: status as CreditApplicationStatus,
                   changedById: currentUser.id,
-                  notes: [statusChangeNote || `Perubahan status menjadi ${status}.`, slikOverrideNote]
+                  notes: [
+                    statusChangeNote || `Perubahan status menjadi ${status}.`,
+                    status === CreditApplicationStatus.RETURNED && returnReason
+                      ? `Alasan pengembalian: ${String(returnReason).trim()}`
+                      : "",
+                    slikOverrideNote,
+                  ]
                     .filter(Boolean)
                     .join(" | "),
                 },
@@ -433,6 +708,24 @@ export async function PUT(
                   status: status as CreditApplicationStatus,
                   approvedAmount: (updateData.approvedAmount as number | null) ?? existing.approvedAmount ?? existing.requestedAmount ?? null,
                   notes: decisionNotes || statusChangeNote || `Putusan ${status} oleh ${approverRoleTitle}.`,
+                },
+              },
+            }
+          : {}),
+        ...(normalizedCommittee
+          ? {
+              committeeDecisions: {
+                create: {
+                  organizationId: currentUser.organizationId,
+                  scheduledAt: normalizedCommittee.scheduledAt,
+                  decidedAt: normalizedCommittee.decidedAt,
+                  quorumRequired: normalizedCommittee.quorumRequired,
+                  participants: normalizedCommittee.participants,
+                  decision: normalizedCommittee.decision as CreditApplicationStatus,
+                  notes: normalizedCommittee.notes,
+                  conditions: normalizedCommittee.conditions,
+                  createdById: currentUser.id,
+                  createdByName: currentUser.fullName,
                 },
               },
             }
@@ -453,10 +746,121 @@ export async function PUT(
           include: { approver: { select: { id: true, fullName: true, email: true } } },
           orderBy: { createdAt: "desc" },
         },
+        documentChecklist: { orderBy: { documentType: "asc" } },
+        committeeDecisions: { orderBy: { decidedAt: "desc" } },
+        disbursementConditions: { orderBy: { sortOrder: "asc" } },
       },
     });
 
-    return NextResponse.json({ success: true, data: updated });
+    // Tahap 9F: simpan syarat pencairan (upsert per id; item yang tidak dikirim
+    // tidak dihapus agar riwayat pemenuhan syarat tidak hilang).
+    if (disbursementConditions !== undefined) {
+      for (const [index, condition] of (disbursementConditions as Array<{
+        id?: string;
+        description: string;
+        isSatisfied?: boolean;
+        note?: string | null;
+      }>).entries()) {
+        const description = String(condition.description).trim();
+        const isSatisfied = Boolean(condition.isSatisfied);
+        const existingCondition = condition.id
+          ? await db.creditDisbursementCondition.findFirst({
+              where: { id: condition.id, organizationId: currentUser.organizationId, creditApplicationId: id },
+              select: { id: true },
+            })
+          : null;
+        if (existingCondition) {
+          await db.creditDisbursementCondition.update({
+            where: { id: existingCondition.id },
+            data: {
+              description,
+              isSatisfied,
+              note: condition.note ?? null,
+              sortOrder: index,
+              satisfiedById: isSatisfied ? currentUser.id : null,
+              satisfiedByName: isSatisfied ? currentUser.fullName : null,
+              satisfiedAt: isSatisfied ? new Date() : null,
+            },
+          });
+        } else {
+          await db.creditDisbursementCondition.create({
+            data: {
+              organizationId: currentUser.organizationId,
+              creditApplicationId: id,
+              description,
+              isSatisfied,
+              note: condition.note ?? null,
+              sortOrder: index,
+              satisfiedById: isSatisfied ? currentUser.id : null,
+              satisfiedByName: isSatisfied ? currentUser.fullName : null,
+              satisfiedAt: isSatisfied ? new Date() : null,
+            },
+          });
+        }
+      }
+    }
+
+    // Tahap 9F: audit trail perubahan pasca-submit (nilai lama/baru per field).
+    const changedFields = Object.keys(updateData);
+    if (isStatusChanged) changedFields.push("status");
+    if (normalizedCommittee) changedFields.push("committeeDecision");
+    if (disbursementConditions !== undefined) changedFields.push("disbursementConditions");
+    if (documentChecklist !== undefined) changedFields.push("documentChecklist");
+    if (changedFields.length > 0) {
+      await logAudit({
+        organizationId: currentUser.organizationId,
+        userId: currentUser.id,
+        // Tahap 7 (P1.6): approval/rejection memakai aksi audit khusus, bukan UPDATE biasa.
+        action: !isStatusChanged
+          ? "UPDATE"
+          : status === "APPROVED"
+          ? "APPROVE"
+          : status === "REJECTED"
+          ? "REJECT"
+          : "STATUS_CHANGE",
+        entityType: "CREDIT_APPLICATION",
+        entityId: id,
+        ...extractClientInfo(req),
+        oldValues: {
+          status: existing.status,
+          ...Object.fromEntries(changedFields.filter((field) => field in existing).map((field) => [field, (existing as Record<string, unknown>)[field]])),
+        },
+        newValues: {
+          fields: changedFields,
+          ...(isStatusChanged ? { status } : {}),
+          ...(returnReason ? { returnReason: String(returnReason).trim() } : {}),
+        },
+        notes: isStatusChanged
+          ? `Perubahan status pengajuan menjadi ${status}.`
+          : "Koreksi/perubahan pengajuan kredit setelah diajukan.",
+      });
+    }
+
+    // Ambil ulang agar checklist/syarat yang baru ditulis ikut terkirim ke UI.
+    const refreshed = await db.creditApplication.findUnique({
+      where: { id },
+      include: {
+        customer: { select: { id: true, customerNumber: true, legalName: true, customerType: true, identityNumber: true, phone: true, email: true } },
+        branch: { select: { id: true, name: true, code: true } },
+        marketingOfficer: { select: { id: true, fullName: true, email: true } },
+        analyst: { select: { id: true, fullName: true, email: true } },
+        surveyOfficer: { select: { id: true, fullName: true, email: true } },
+        decisionMaker: { select: { id: true, fullName: true, email: true } },
+        statusHistories: {
+          include: { changedBy: { select: { id: true, fullName: true, email: true } } },
+          orderBy: { createdAt: "desc" },
+        },
+        approvalRecords: {
+          include: { approver: { select: { id: true, fullName: true, email: true } } },
+          orderBy: { createdAt: "desc" },
+        },
+        documentChecklist: { orderBy: { documentType: "asc" } },
+        committeeDecisions: { orderBy: { decidedAt: "desc" } },
+        disbursementConditions: { orderBy: { sortOrder: "asc" } },
+      },
+    });
+
+    return NextResponse.json({ success: true, data: refreshed ?? updated });
   } catch (error) {
     console.error("Error updating credit application:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

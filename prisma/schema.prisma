@@ -46,6 +46,9 @@ model Organization {
   slikAnalysisRecords      SlikAnalysisRecord[]
   creditSlikOverrides      CreditSlikOverride[]
   slikAnalysisVerifications SlikAnalysisVerification[]
+  creditDocumentChecklists CreditDocumentChecklist[]
+  creditCommitteeDecisions CreditCommitteeDecision[]
+  creditDisbursementConditions CreditDisbursementCondition[]
 
   @@map("organizations")
 }
@@ -73,6 +76,7 @@ model Branch {
   purchaseRequests   PurchaseRequest[]
   purchaseOrders     PurchaseOrder[]
   goodsReceipts      GoodsReceipt[]
+  creditApprovalLimits CreditApprovalLimit[] // Tahap 9B: limit dapat berlaku per cabang
 
   @@unique([organizationId, code])
   @@map("branches")
@@ -543,6 +547,9 @@ model CreditApplication {
   fieldTasks      FieldTask[]
   slikAnalyses    SlikAnalysisRecord[]
   slikOverrides   CreditSlikOverride[]
+  documentChecklist CreditDocumentChecklist[]
+  committeeDecisions CreditCommitteeDecision[]
+  disbursementConditions CreditDisbursementCondition[]
 
   @@map("credit_applications")
 }
@@ -671,6 +678,8 @@ model CreditStatusHistory {
 model CreditApprovalLimit {
   id             String   @id @default(uuid()) @db.Uuid
   organizationId String   @map("organization_id") @db.Uuid
+  /// null = berlaku untuk seluruh organisasi; terisi = khusus cabang tersebut.
+  branchId       String?  @map("branch_id") @db.Uuid
   roleId         String   @map("role_id") @db.Uuid
   levelName      String   @map("level_name") @db.VarChar(100)
   minAmount      Decimal    @default(0) @map("min_amount") @db.Decimal(18, 0)
@@ -681,9 +690,85 @@ model CreditApprovalLimit {
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  branch       Branch?      @relation(fields: [branchId], references: [id])
   role         Role         @relation(fields: [roleId], references: [id])
 
+  @@index([organizationId, branchId])
   @@map("credit_approval_limits")
+}
+
+/// Tahap 9C (P1.1) — checklist verifikasi berkas per pengajuan.
+/// Item wajib berasal dari `requiredDocuments` produk (Master Data); item
+/// tambahan boleh dicatat manual. `isRequired` disalin saat checklist dibuat
+/// agar riwayat tidak berubah ketika konfigurasi produk diubah kemudian.
+model CreditDocumentChecklist {
+  id                  String   @id @default(uuid()) @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  creditApplicationId String   @map("credit_application_id") @db.Uuid
+  documentType        DocumentType @map("document_type")
+  isRequired          Boolean  @default(false) @map("is_required")
+  isChecked           Boolean  @default(false) @map("is_checked")
+  note                String?  @db.Text
+  checkedById         String?  @map("checked_by_id") @db.Uuid
+  checkedByName       String?  @map("checked_by_name") @db.VarChar(200)
+  checkedAt           DateTime? @map("checked_at") @db.Timestamptz
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+  creditApplication CreditApplication @relation(fields: [creditApplicationId], references: [id], onDelete: Cascade)
+
+  @@unique([creditApplicationId, documentType])
+  @@index([organizationId, creditApplicationId])
+  @@map("credit_document_checklists")
+}
+
+/// Tahap 9E (P1.1) — risalah sidang Komite Kredit.
+/// `participants` berisi array { name, role, present, vote }. Kuorum dihitung
+/// server dari jumlah peserta `present`; keputusan tidak sah bila < kuorum.
+model CreditCommitteeDecision {
+  id                  String   @id @default(uuid()) @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  creditApplicationId String   @map("credit_application_id") @db.Uuid
+  scheduledAt         DateTime @map("scheduled_at") @db.Timestamptz
+  decidedAt           DateTime @map("decided_at") @db.Timestamptz
+  quorumRequired      Int      @map("quorum_required")
+  participants        Json
+  decision            CreditApplicationStatus
+  notes               String?  @db.Text
+  conditions          String?  @db.Text
+  createdById         String?  @map("created_by_id") @db.Uuid
+  createdByName       String   @map("created_by_name") @db.VarChar(200)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+  creditApplication CreditApplication @relation(fields: [creditApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([creditApplicationId, decidedAt])
+  @@map("credit_committee_decisions")
+}
+
+/// Tahap 9F (P1.1) — syarat terstruktur sebelum pencairan.
+/// Pencairan ditolak server bila masih ada syarat yang belum dipenuhi.
+model CreditDisbursementCondition {
+  id                  String   @id @default(uuid()) @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  creditApplicationId String   @map("credit_application_id") @db.Uuid
+  description         String   @db.Text
+  isSatisfied         Boolean  @default(false) @map("is_satisfied")
+  note                String?  @db.Text
+  satisfiedById       String?  @map("satisfied_by_id") @db.Uuid
+  satisfiedByName     String?  @map("satisfied_by_name") @db.VarChar(200)
+  satisfiedAt         DateTime? @map("satisfied_at") @db.Timestamptz
+  sortOrder           Int      @default(0) @map("sort_order")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+  creditApplication CreditApplication @relation(fields: [creditApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([creditApplicationId, sortOrder])
+  @@map("credit_disbursement_conditions")
 }
 
 model CreditApprovalRecord {

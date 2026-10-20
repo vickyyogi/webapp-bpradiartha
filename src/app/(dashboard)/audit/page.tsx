@@ -31,6 +31,9 @@ const ACTIONS = [
   "ASSIGN",
   "TRANSFER",
   "DISPOSAL",
+  "EXPORT",
+  "UPLOAD",
+  "DOWNLOAD",
 ];
 
 const ENTITIES = [
@@ -44,6 +47,10 @@ const ENTITIES = [
   "LEAD",
   "USER",
   "DOCUMENT",
+  "REPORT",
+  "ROLE",
+  "CREDIT_APPROVAL_LIMIT",
+  "MASTER_DATA",
 ];
 
 interface AuditLog {
@@ -256,7 +263,7 @@ export default function AuditTrailPage() {
                           </span>
                           {log.user?.employeeNumber && (
                             <span className="block font-mono text-[10px] text-muted-foreground">
-                              NIK: {log.user.employeeNumber}
+                              No. Pegawai: {log.user.employeeNumber}
                             </span>
                           )}
                         </td>

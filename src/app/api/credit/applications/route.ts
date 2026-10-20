@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma, CreditApplicationStatus } from "@prisma/client";
+import { Prisma, CreditApplicationStatus, DocumentType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
 import { createSecureErrorResponse, sanitizeInput } from "@/lib/security";
@@ -24,8 +24,13 @@ import {
   validateDocumentUpload,
   type SniffedDocumentType,
 } from "@/lib/document-storage";
-import { extractClientInfo, logAudit } from "@/lib/audit";
+import { buildAuditLogData, extractClientInfo, logAudit } from "@/lib/audit";
 import { listActiveCreditProducts, validateCreditRequestAgainstProduct } from "@/lib/credit-product";
+import {
+  APPLICATION_NUMBER_MAX_RETRIES,
+  generateApplicationNumber,
+  requiredDocumentsForProduct,
+} from "@/lib/credit-governance";
 
 /** Field penugasan pada pengajuan kredit yang memberi hak akses kepada petugas. */
 export const CREDIT_ASSIGNMENT_FIELDS = [
@@ -345,43 +350,100 @@ export async function POST (req: NextRequest) {
       return NextResponse.json({ error: "Data nasabah pemohon tidak dapat ditentukan." }, { status: 400 });
     }
 
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const applicationNumber = `KRD-${dateStr}-${randomSuffix}`;
-
     const combinedNotes = notes ? sanitizeInput(notes) : "";
 
-    const newApplication = await db.creditApplication.create({
-      data: {
-        organizationId: currentUser.organizationId,
-        branchId: branchId || currentUser.branchId,
-        applicationNumber,
-        customerId: targetCustomerId,
-        product: sanitizeInput(product),
-        requestedAmount: requestedAmount ? parseFloat(requestedAmount) : null,
-        requestedTenorMonths: requestedTenorMonths ? parseInt(requestedTenorMonths, 10) : null,
-        purpose: sanitizeInput(purpose),
-        source: source ? sanitizeInput(source) : "Marketing Officer",
-        assignedMarketingOfficerId: assignedMarketingOfficerId || currentUser.id,
-        assignedAnalystId: assignedAnalystId || null,
-        assignedSurveyOfficerId: assignedSurveyOfficerId || null,
-        status: CreditApplicationStatus.SUBMITTED,
-        submissionDate: new Date(),
-        notes: combinedNotes,
-        statusHistories: {
-          create: {
-            status: CreditApplicationStatus.SUBMITTED,
-            changedById: currentUser.id,
-            notes: "Permohonan kredit baru berhasil diajukan.",
-          },
-        },
-      },
-      include: {
-        customer: { select: CUSTOMER_SELECT },
-        branch: { select: { id: true, name: true, code: true } },
-        marketingOfficer: { select: { id: true, fullName: true, email: true } },
-      },
-    });
+    // Tahap 9C: checklist berkas disalin dari persyaratan produk saat pengajuan
+    // dibuat. Item wajib tetap tersimpan walau konfigurasi produk berubah.
+    const requiredDocuments = requiredDocumentsForProduct(products, product);
+
+    // Tahap 9F: nomor aplikasi memakai entropi kriptografis dan di-retry bila
+    // terjadi bentrok unik (aman untuk pengajuan bersamaan).
+    const clientInfo = extractClientInfo(req);
+    let newApplication: Awaited<ReturnType<typeof db.creditApplication.create>> | null = null;
+    for (let attempt = 0; attempt < APPLICATION_NUMBER_MAX_RETRIES && !newApplication; attempt++) {
+      try {
+        // Tahap 7 (P1.6): pengajuan baru + audit CREATE ditulis atomik.
+        newApplication = await db.$transaction(async (tx) => {
+          const created = await tx.creditApplication.create({
+            data: {
+              organizationId: currentUser.organizationId,
+              branchId: branchId || currentUser.branchId,
+              applicationNumber: generateApplicationNumber(),
+              customerId: targetCustomerId,
+              product: sanitizeInput(product),
+              requestedAmount: requestedAmount ? parseFloat(requestedAmount) : null,
+              requestedTenorMonths: requestedTenorMonths ? parseInt(requestedTenorMonths, 10) : null,
+              purpose: sanitizeInput(purpose),
+              source: source ? sanitizeInput(source) : "Marketing Officer",
+              assignedMarketingOfficerId: assignedMarketingOfficerId || currentUser.id,
+              assignedAnalystId: assignedAnalystId || null,
+              assignedSurveyOfficerId: assignedSurveyOfficerId || null,
+              status: CreditApplicationStatus.SUBMITTED,
+              submissionDate: new Date(),
+              notes: combinedNotes,
+              statusHistories: {
+                create: {
+                  status: CreditApplicationStatus.SUBMITTED,
+                  changedById: currentUser.id,
+                  notes: "Permohonan kredit baru berhasil diajukan.",
+                },
+              },
+              ...(requiredDocuments.length > 0
+                ? {
+                    documentChecklist: {
+                      create: requiredDocuments.map((documentType) => ({
+                        organizationId: currentUser.organizationId,
+                        documentType: documentType as DocumentType,
+                        isRequired: true,
+                      })),
+                    },
+                  }
+                : {}),
+            },
+            include: {
+              customer: { select: CUSTOMER_SELECT },
+              branch: { select: { id: true, name: true, code: true } },
+              marketingOfficer: { select: { id: true, fullName: true, email: true } },
+            },
+          });
+
+          await tx.auditLog.create({
+            data: buildAuditLogData({
+              organizationId: currentUser.organizationId,
+              userId: currentUser.id,
+              action: "CREATE",
+              entityType: "CREDIT_APPLICATION",
+              entityId: created.id,
+              newValues: {
+                applicationNumber: created.applicationNumber,
+                customerId: created.customerId,
+                branchId: created.branchId,
+                product: created.product,
+                requestedAmount: created.requestedAmount?.toString() ?? null,
+                requestedTenorMonths: created.requestedTenorMonths,
+                status: created.status,
+              },
+              ...clientInfo,
+              notes: "Pengajuan kredit baru dibuat.",
+            }),
+          });
+
+          return created;
+        });
+      } catch (error) {
+        const isNumberCollision =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002" &&
+          attempt < APPLICATION_NUMBER_MAX_RETRIES - 1;
+        if (!isNumberCollision) throw error;
+      }
+    }
+    if (!newApplication) {
+      return NextResponse.json(
+        { error: "Nomor pengajuan gagal dibuat. Silakan coba lagi." },
+        { status: 503 }
+      );
+    }
 
     if (ktpBuffer && ktpType) {
       const savedKtp = await savePrivateDocument(ktpBuffer, ktpType.ext);

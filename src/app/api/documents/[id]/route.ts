@@ -4,7 +4,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
 import { evaluateDocumentAccess } from "@/lib/document-access";
-import { extractClientInfo, logAudit } from "@/lib/audit";
+import { buildAuditLogData, extractClientInfo } from "@/lib/audit";
 import {
   deletePrivateDocument,
   parseDocumentRef,
@@ -81,21 +81,27 @@ export async function DELETE(
       return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
     }
 
-    await logAudit({
-      organizationId: user.organizationId,
-      userId: user.id,
-      action: "DELETE",
-      entityType: "DOCUMENT",
-      entityId: document.id,
-      ...extractClientInfo(req),
-      oldValues: { documentType: document.documentType, mimeType: document.mimeType, fileSize: document.fileSize },
-      notes: "Dokumen dihapus dari sistem.",
-    });
+    const clientInfo = extractClientInfo(req);
+    // Tahap 7 (P1.6): audit + penghapusan record atomik.
+    await db.$transaction(async (tx) => {
+      await tx.auditLog.create({
+        data: buildAuditLogData({
+          organizationId: user.organizationId,
+          userId: user.id,
+          action: "DELETE",
+          entityType: "DOCUMENT",
+          entityId: document.id,
+          ...clientInfo,
+          oldValues: { documentType: document.documentType, mimeType: document.mimeType, fileSize: document.fileSize },
+          notes: "Dokumen dihapus dari sistem.",
+        }),
+      });
 
-    // Baris database dihapus lebih dulu: bila penghapusan berkas gagal, yang
-    // tersisa hanyalah berkas yatim (aman), bukan record yang menunjuk ke
-    // berkas yang sudah tidak ada.
-    await db.document.delete({ where: { id } });
+      // Baris database dihapus lebih dulu: bila penghapusan berkas gagal, yang
+      // tersisa hanyalah berkas yatim (aman), bukan record yang menunjuk ke
+      // berkas yang sudah tidak ada.
+      await tx.document.delete({ where: { id } });
+    });
 
     const ref = parseDocumentRef(document.filePath);
     if (ref.kind === "private") {

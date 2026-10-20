@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db";
 import { requireAuthAndPermission } from "@/lib/permissions";
-import { logAudit, extractClientInfo } from "@/lib/audit";
+import { buildAuditLogData, extractClientInfo } from "@/lib/audit";
 import { hashPassword, validatePasswordPolicy } from "@/lib/password";
 
 export async function GET() {
@@ -81,52 +81,58 @@ export async function POST (req: NextRequest) {
     }
     const passwordHash = await hashPassword(password);
 
-    const user = await db.user.create({
-      data: {
-        organizationId: currentUser.organizationId,
-        email,
-        fullName,
-        passwordHash,
-        passwordChangedAt: new Date(),
-        phone: phone || null,
-        employeeNumber: employeeNumber || null,
-        branchId: branchId || null,
-        departmentId: departmentId || null,
-        isActive: true,
-        userRoles: {
-          create: (roleIds || []).map((roleId: string) => ({
-            roleId,
-          })),
-        },
-      },
-      include: {
-        branch: { select: { id: true, name: true } },
-        department: { select: { id: true, name: true } },
-        userRoles: {
-          include: {
-            role: { select: { id: true, name: true, code: true } },
+    const clientInfo = extractClientInfo(req);
+    const user = await db.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          organizationId: currentUser.organizationId,
+          email,
+          fullName,
+          passwordHash,
+          passwordChangedAt: new Date(),
+          phone: phone || null,
+          employeeNumber: employeeNumber || null,
+          branchId: branchId || null,
+          departmentId: departmentId || null,
+          isActive: true,
+          userRoles: {
+            create: (roleIds || []).map((roleId: string) => ({
+              roleId,
+            })),
           },
         },
-      },
-    });
+        include: {
+          branch: { select: { id: true, name: true } },
+          department: { select: { id: true, name: true } },
+          userRoles: {
+            include: {
+              role: { select: { id: true, name: true, code: true } },
+            },
+          },
+        },
+      });
 
-    const clientInfo = extractClientInfo(req);
-    await logAudit({
-      organizationId: currentUser.organizationId,
-      userId: currentUser.id,
-      action: "CREATE",
-      entityType: "USER",
-      entityId: user.id,
-      newValues: { email, fullName, phone, employeeNumber, branchId, departmentId, roleIds },
-      ipAddress: clientInfo.ipAddress,
-      userAgent: clientInfo.userAgent,
-      notes: `Menambahkan pengguna: ${fullName} (${email})`,
+      await tx.auditLog.create({
+        data: buildAuditLogData({
+          organizationId: currentUser.organizationId,
+          userId: currentUser.id,
+          action: "CREATE",
+          entityType: "USER",
+          entityId: created.id,
+          newValues: { email, fullName, phone, employeeNumber, branchId, departmentId, roleIds },
+          ipAddress: clientInfo.ipAddress,
+          userAgent: clientInfo.userAgent,
+          notes: `Menambahkan pengguna: ${fullName} (${email})`,
+        }),
+      });
+
+      return created;
     });
 
     return NextResponse.json(user, { status: 201 });
   } catch (error) {
     console.error("POST /api/users error:", error);
-    if (error.code === "P2002") {
+    if ((error as { code?: string })?.code === "P2002") {
       return NextResponse.json({ error: "Email sudah terdaftar" }, { status: 400 });
     }
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
