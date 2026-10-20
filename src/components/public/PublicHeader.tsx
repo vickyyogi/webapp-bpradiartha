@@ -97,7 +97,7 @@ export function PublicHeader() {
                   (e.target as HTMLImageElement).src = "/logo.png"; // Fallback ke logo default jika gagal memuat
                 }}
               />
-              <span className="font-semibold text-lp-text">BPR Adiartha Reksacitra</span>
+              <span className="font-semibold text-lp-text ">BPR Adiartha Reksacitra</span>
             </div>
           </Link>
 

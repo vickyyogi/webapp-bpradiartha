@@ -88,7 +88,7 @@ export function PublicFooter() {
                 <Phone className="h-4 w-4 text-lp-accent shrink-0" />
                 <span>(0341) 453200 </span>
                 <span> - </span>
-                <span>(WA) <Link href="https://wa.me/081383555501" target="_blank" rel="noopener noreferrer" className="hover:text-lp-band-text transition-colors">
+                <span className="text-semibold text-lp-accent">(WA) <Link href="https://wa.me/+6281383555501" target="_blank" rel="noopener noreferrer" className="hover:text-lp-band-text transition-colors">
                   081383555501
                 </Link></span>
               </p>
