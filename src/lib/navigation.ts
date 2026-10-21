@@ -51,6 +51,7 @@ export const MODULE_PERMISSIONS = {
     "credit.realization.view",
   ],
   creditApplications: ["credit.application.view"],
+  creditCollaterals: ["credit.collateral.view"],
   creditSlik: ["credit.analysis.view", "credit.application.view"],
   field: ["field.task.view", "field.activity.view", "field.performance.view", "credit.survey.view"],
   fieldTasks: ["field.task.view", "credit.survey.view"],
@@ -107,6 +108,7 @@ export const NAV_SECTIONS: NavSectionConfig[] = [
         children: [
           { key: "credit.home", title: "Pipeline & Analisis", href: "/credit", permissions: [...MODULE_PERMISSIONS.credit] },
           { key: "credit.applications", title: "Pengajuan Kredit", href: "/credit/applications", permissions: [...MODULE_PERMISSIONS.creditApplications] },
+          { key: "credit.collaterals", title: "Agunan & Jaminan", href: "/credit/collaterals", permissions: [...MODULE_PERMISSIONS.creditCollaterals] },
           { key: "credit.slik", title: "Analisa SLIK OJK", href: "/credit/slik-analyzer", permissions: [...MODULE_PERMISSIONS.creditSlik] },
         ],
       },
@@ -225,6 +227,7 @@ export const NAV_ROUTE_REQUIREMENTS: Array<{
   { prefix: "/crm/leads", permissions: MODULE_PERMISSIONS.crmLeads },
   { prefix: "/crm", permissions: MODULE_PERMISSIONS.crm },
   { prefix: "/credit/applications", permissions: MODULE_PERMISSIONS.creditApplications },
+  { prefix: "/credit/collaterals", permissions: MODULE_PERMISSIONS.creditCollaterals },
   { prefix: "/credit/slik-analyzer", permissions: MODULE_PERMISSIONS.creditSlik },
   { prefix: "/credit", permissions: MODULE_PERMISSIONS.credit },
   { prefix: "/field/tasks", permissions: MODULE_PERMISSIONS.fieldTasks },

@@ -17,38 +17,39 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  branches             Branch[]
-  departments          Department[]
-  users                User[]
-  leads                Lead[] // added for Lead relation
-  customers            Customer[] // Tahap 2A (P0.2): master nasabah/debitur terpisah dari pegawai
-  creditApplications   CreditApplication[]
-  creditApprovalLimits CreditApprovalLimit[]
-  fieldTasks           FieldTask[]
-  documents            Document[]
-  inventoryItems       InventoryItem[]
-  assets               Asset[]
-  vendors              Vendor[]
-  purchaseRequests     PurchaseRequest[]
-  purchaseOrders       PurchaseOrder[]
-  goodsReceipts        GoodsReceipt[]
-  workflows            Workflow[]
-  auditLogs            AuditLog[]
-  notifications        Notification[]
-  cmsBanners           CmsBanner[]
-  cmsPosts             CmsPost[]
-  cmsFaqs              CmsFaq[]
-  cmsGalleries         CmsGallery[]
-  cmsProducts          CmsProduct[]
-  cmsReports           CmsReport[]
-  cmsHeroSlides        CmsHeroSlide[]
-  masterItems          MasterItem[]
-  slikAnalysisRecords      SlikAnalysisRecord[]
-  creditSlikOverrides      CreditSlikOverride[]
-  slikAnalysisVerifications SlikAnalysisVerification[]
-  creditDocumentChecklists CreditDocumentChecklist[]
-  creditCommitteeDecisions CreditCommitteeDecision[]
+  branches                     Branch[]
+  departments                  Department[]
+  users                        User[]
+  leads                        Lead[] // added for Lead relation
+  customers                    Customer[] // Tahap 2A (P0.2): master nasabah/debitur terpisah dari pegawai
+  creditApplications           CreditApplication[]
+  creditApprovalLimits         CreditApprovalLimit[]
+  fieldTasks                   FieldTask[]
+  documents                    Document[]
+  inventoryItems               InventoryItem[]
+  assets                       Asset[]
+  vendors                      Vendor[]
+  purchaseRequests             PurchaseRequest[]
+  purchaseOrders               PurchaseOrder[]
+  goodsReceipts                GoodsReceipt[]
+  workflows                    Workflow[]
+  auditLogs                    AuditLog[]
+  notifications                Notification[]
+  cmsBanners                   CmsBanner[]
+  cmsPosts                     CmsPost[]
+  cmsFaqs                      CmsFaq[]
+  cmsGalleries                 CmsGallery[]
+  cmsProducts                  CmsProduct[]
+  cmsReports                   CmsReport[]
+  cmsHeroSlides                CmsHeroSlide[]
+  masterItems                  MasterItem[]
+  slikAnalysisRecords          SlikAnalysisRecord[]
+  creditSlikOverrides          CreditSlikOverride[]
+  slikAnalysisVerifications    SlikAnalysisVerification[]
+  creditDocumentChecklists     CreditDocumentChecklist[]
+  creditCommitteeDecisions     CreditCommitteeDecision[]
   creditDisbursementConditions CreditDisbursementCondition[]
+  creditCollaterals            CreditCollateral[]
 
   @@map("organizations")
 }
@@ -64,19 +65,20 @@ model Branch {
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  organization       Organization        @relation(fields: [organizationId], references: [id])
-  users              User[] // added backrelation for User.branch
-  leads              Lead[] // existing leads relation
-  customers          Customer[] // Tahap 2A (P0.2): nasabah dapat terikat ke cabang
-  creditApplications CreditApplication[]
-  slikAnalysisRecords SlikAnalysisRecord[]
-  fieldTasks         FieldTask[]
-  inventoryItems     InventoryItem[]
-  assets             Asset[]
-  purchaseRequests   PurchaseRequest[]
-  purchaseOrders     PurchaseOrder[]
-  goodsReceipts      GoodsReceipt[]
+  organization         Organization          @relation(fields: [organizationId], references: [id])
+  users                User[] // added backrelation for User.branch
+  leads                Lead[] // existing leads relation
+  customers            Customer[] // Tahap 2A (P0.2): nasabah dapat terikat ke cabang
+  creditApplications   CreditApplication[]
+  slikAnalysisRecords  SlikAnalysisRecord[]
+  fieldTasks           FieldTask[]
+  inventoryItems       InventoryItem[]
+  assets               Asset[]
+  purchaseRequests     PurchaseRequest[]
+  purchaseOrders       PurchaseOrder[]
+  goodsReceipts        GoodsReceipt[]
   creditApprovalLimits CreditApprovalLimit[] // Tahap 9B: limit dapat berlaku per cabang
+  creditCollaterals    CreditCollateral[] // Tahap 10 (P1.2): agunan per cabang
 
   @@unique([organizationId, code])
   @@map("branches")
@@ -143,32 +145,34 @@ model User {
   customerRelationshipsCreated CustomerRelationship[]    @relation("CustomerRelationshipCreator")
   customerConsentsRecorded     CustomerConsent[]         @relation("CustomerConsentRecorder")
 
-  marketingCreditApplications    CreditApplication[]    @relation("CreditMarketingOfficer")
-  analystCreditApplications      CreditApplication[]    @relation("CreditAnalyst")
-  surveyCreditApplications       CreditApplication[]    @relation("CreditSurveyOfficer")
-  decisionCreditApplications     CreditApplication[]    @relation("CreditDecisionMaker")
+  marketingCreditApplications    CreditApplication[]        @relation("CreditMarketingOfficer")
+  analystCreditApplications      CreditApplication[]        @relation("CreditAnalyst")
+  surveyCreditApplications       CreditApplication[]        @relation("CreditSurveyOfficer")
+  decisionCreditApplications     CreditApplication[]        @relation("CreditDecisionMaker")
   statusChanges                  CreditStatusHistory[]
   creditApprovals                CreditApprovalRecord[]
-  assignedFieldTasks             FieldTask[]            @relation("OfficerFieldTasks")
-  uploadedDocuments              Document[]             @relation("DocumentUploader")
-  assignedAssets                 Asset[]                @relation("AssetCurrentHolder")
-  performedInventoryTransactions InventoryTransaction[] @relation("InventoryTransactionPerformer")
-  performedAssetHistories        AssetHistory[]         @relation("AssetHistoryPerformer")
-  performedAssetMaintenances     AssetMaintenance[]     @relation("AssetMaintenancePerformer")
-  requestedPurchaseRequests      PurchaseRequest[]      @relation("PurchaseRequester")
-  createdPurchaseOrders          PurchaseOrder[]        @relation("PurchaseOrderCreator")
-  receivedGoodsReceipts          GoodsReceipt[]         @relation("GoodsReceiptReceiver")
-  performedWorkflowActions       WorkflowAction[]       @relation("WorkflowActionActor")
-  createdSlikAnalyses            SlikAnalysisRecord[]    @relation("SlikAnalysisCreatedBy")
-  recordedSlikOverrides          CreditSlikOverride[]    @relation("SlikOverrideRecorder")
+  assignedFieldTasks             FieldTask[]                @relation("OfficerFieldTasks")
+  uploadedDocuments              Document[]                 @relation("DocumentUploader")
+  assignedAssets                 Asset[]                    @relation("AssetCurrentHolder")
+  performedInventoryTransactions InventoryTransaction[]     @relation("InventoryTransactionPerformer")
+  performedAssetHistories        AssetHistory[]             @relation("AssetHistoryPerformer")
+  performedAssetMaintenances     AssetMaintenance[]         @relation("AssetMaintenancePerformer")
+  requestedPurchaseRequests      PurchaseRequest[]          @relation("PurchaseRequester")
+  createdPurchaseOrders          PurchaseOrder[]            @relation("PurchaseOrderCreator")
+  receivedGoodsReceipts          GoodsReceipt[]             @relation("GoodsReceiptReceiver")
+  performedWorkflowActions       WorkflowAction[]           @relation("WorkflowActionActor")
+  createdSlikAnalyses            SlikAnalysisRecord[]       @relation("SlikAnalysisCreatedBy")
+  recordedSlikOverrides          CreditSlikOverride[]       @relation("SlikOverrideRecorder")
   verifiedSlikAnalyses           SlikAnalysisVerification[] @relation("SlikVerificationVerifier")
-  auditLogs                      AuditLog[]             @relation("AuditLogUser")
-  notifications                  Notification[]         @relation("UserNotifications")
+  createdCreditCollaterals       CreditCollateral[]         @relation("CollateralCreatedBy")
+  performedCollateralAppraisals  CollateralAppraisal[]      @relation("CollateralAppraisalCreatedBy")
+  auditLogs                      AuditLog[]                 @relation("AuditLogUser")
+  notifications                  Notification[]             @relation("UserNotifications")
   mfaBackupCodes                 MfaBackupCode[]
   mfaChallenges                  MfaChallenge[]
   passwordResetTokens            PasswordResetToken[]
-  mustChangePassword             Boolean                @default(false) @map("must_change_password")
-  sessionsValidFrom              DateTime?              @map("sessions_valid_from") @db.Timestamptz
+  mustChangePassword             Boolean                    @default(false) @map("must_change_password")
+  sessionsValidFrom              DateTime?                  @map("sessions_valid_from") @db.Timestamptz
 
   @@map("users")
 }
@@ -356,9 +360,9 @@ model Customer {
   email String? @db.VarChar(255)
 
   // Profil usaha/pekerjaan (opsional)
-  occupation    String? @db.VarChar(150)
-  employerName  String? @map("employer_name") @db.VarChar(200)
-  monthlyIncome Decimal?  @map("monthly_income") @db.Decimal(18, 0) // Tahap 6 (P0.6): nominal rupiah presisi tetap
+  occupation    String?  @db.VarChar(150)
+  employerName  String?  @map("employer_name") @db.VarChar(200)
+  monthlyIncome Decimal? @map("monthly_income") @db.Decimal(18, 0) // Tahap 6 (P0.6): nominal rupiah presisi tetap
 
   // Jejak perubahan & verifikasi identitas (P0.2)
   createdById  String?   @map("created_by_id") @db.Uuid
@@ -391,6 +395,9 @@ model Customer {
   relationshipsAsSubject CustomerRelationship[]    @relation("CustomerRelationshipSubject")
   relationshipsAsRelated CustomerRelationship[]    @relation("CustomerRelationshipRelated")
   consents               CustomerConsent[]
+
+  // Tahap 10 (P1.2): agunan tersendiri yang berelasi dengan nasabah.
+  collaterals CreditCollateral[]
 
   @@unique([organizationId, customerNumber])
   @@index([organizationId, identityNumber])
@@ -502,7 +509,7 @@ model CreditApplication {
   applicationNumber          String                  @unique @db.VarChar(50)
   customerId                 String                  @map("customer_id") @db.Uuid
   product                    String?                 @db.VarChar(200)
-  requestedAmount            Decimal? @db.Decimal(18, 0)
+  requestedAmount            Decimal?                @db.Decimal(18, 0)
   requestedTenorMonths       Int?
   purpose                    String?                 @db.Text
   source                     String?                 @db.VarChar(100)
@@ -518,9 +525,9 @@ model CreditApplication {
   surveyData   Json? @map("survey_data")
 
   // Keputusan Komite Kredit
-  approvedAmount      Decimal?    @map("approved_amount") @db.Decimal(18, 0)
+  approvedAmount      Decimal?  @map("approved_amount") @db.Decimal(18, 0)
   approvedTenorMonths Int?      @map("approved_tenor_months")
-  interestRate        Decimal?    @map("interest_rate") @db.Decimal(6, 4)
+  interestRate        Decimal?  @map("interest_rate") @db.Decimal(6, 4)
   decisionDate        DateTime? @map("decision_date") @db.Timestamptz
   decisionMakerId     String?   @map("decision_maker_id") @db.Uuid
   decisionNotes       String?   @map("decision_notes") @db.Text
@@ -529,7 +536,7 @@ model CreditApplication {
   // Realisasi / Pencairan Kredit
   realizationDate      DateTime? @map("realization_date") @db.Timestamptz
   realizationReference String?   @map("realization_reference") @db.VarChar(100)
-  realizationAmount    Decimal?    @map("realization_amount") @db.Decimal(18, 0)
+  realizationAmount    Decimal?  @map("realization_amount") @db.Decimal(18, 0)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
@@ -542,14 +549,15 @@ model CreditApplication {
   surveyOfficer    User?        @relation("CreditSurveyOfficer", fields: [assignedSurveyOfficerId], references: [id])
   decisionMaker    User?        @relation("CreditDecisionMaker", fields: [decisionMakerId], references: [id])
 
-  statusHistories CreditStatusHistory[]
-  approvalRecords CreditApprovalRecord[]
-  fieldTasks      FieldTask[]
-  slikAnalyses    SlikAnalysisRecord[]
-  slikOverrides   CreditSlikOverride[]
-  documentChecklist CreditDocumentChecklist[]
-  committeeDecisions CreditCommitteeDecision[]
+  statusHistories        CreditStatusHistory[]
+  approvalRecords        CreditApprovalRecord[]
+  fieldTasks             FieldTask[]
+  slikAnalyses           SlikAnalysisRecord[]
+  slikOverrides          CreditSlikOverride[]
+  documentChecklist      CreditDocumentChecklist[]
+  committeeDecisions     CreditCommitteeDecision[]
   disbursementConditions CreditDisbursementCondition[]
+  collaterals            CreditCollateral[]
 
   @@map("credit_applications")
 }
@@ -561,11 +569,11 @@ model CreditApplication {
 /// Nominal uang sengaja TIDAK dijadikan kolom tersendiri — nilai uang tetap di
 /// dalam `result` (JSON) dan akan ikut dimigrasikan bersama P0.6 (Tahap 6).
 model SlikAnalysisRecord {
-  id                  String   @id @default(uuid()) @db.Uuid
-  organizationId      String   @map("organization_id") @db.Uuid
-  branchId            String?  @map("branch_id") @db.Uuid
-  customerId          String   @map("customer_id") @db.Uuid
-  creditApplicationId String?  @map("credit_application_id") @db.Uuid
+  id                  String  @id @default(uuid()) @db.Uuid
+  organizationId      String  @map("organization_id") @db.Uuid
+  branchId            String? @map("branch_id") @db.Uuid
+  customerId          String  @map("customer_id") @db.Uuid
+  creditApplicationId String? @map("credit_application_id") @db.Uuid
 
   // Snapshot ringkas untuk daftar/riwayat (tetap terbaca bila data induk berubah).
   customerName    String @map("customer_name") @db.VarChar(200)
@@ -583,9 +591,9 @@ model SlikAnalysisRecord {
   result Json
   meta   Json?
 
-  createdById String?   @map("created_by_id") @db.Uuid
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   organization      Organization       @relation(fields: [organizationId], references: [id])
   branch            Branch?            @relation(fields: [branchId], references: [id])
@@ -593,8 +601,8 @@ model SlikAnalysisRecord {
   creditApplication CreditApplication? @relation(fields: [creditApplicationId], references: [id])
   createdBy         User?              @relation("SlikAnalysisCreatedBy", fields: [createdById], references: [id])
 
-  overrides      CreditSlikOverride[]
-  verifications  SlikAnalysisVerification[]
+  overrides     CreditSlikOverride[]
+  verifications SlikAnalysisVerification[]
 
   @@index([organizationId, createdAt])
   @@index([organizationId, customerId])
@@ -608,20 +616,20 @@ model SlikAnalysisRecord {
 /// berjejak, record hasil AI tidak pernah diubah. Nominal sudah Decimal
 /// (Tahap 6) agar pembandingan angka tidak terkena galat pembulatan Float.
 model SlikAnalysisVerification {
-  id                   String   @id @default(uuid()) @db.Uuid
-  organizationId       String   @map("organization_id") @db.Uuid
-  slikAnalysisRecordId String?  @map("slik_analysis_record_id") @db.Uuid
+  id                   String  @id @default(uuid()) @db.Uuid
+  organizationId       String  @map("organization_id") @db.Uuid
+  slikAnalysisRecordId String? @map("slik_analysis_record_id") @db.Uuid
 
   // Snapshot nilai AI saat diverifikasi (pembanding koreksi).
-  aiBakiDebet      Decimal?  @map("ai_baki_debet") @db.Decimal(18, 0)
-  aiTunggakan      Decimal?  @map("ai_tunggakan") @db.Decimal(18, 0)
-  aiKolektibilitas String? @map("ai_kolektibilitas") @db.VarChar(100)
+  aiBakiDebet      Decimal? @map("ai_baki_debet") @db.Decimal(18, 0)
+  aiTunggakan      Decimal? @map("ai_tunggakan") @db.Decimal(18, 0)
+  aiKolektibilitas String?  @map("ai_kolektibilitas") @db.VarChar(100)
 
   // Nilai yang dikonfirmasi petugas terhadap dokumen asli
   // (sama = konfirmasi murni; beda = koreksi, tercatat berjejak).
-  confirmedBakiDebet      Decimal?  @map("confirmed_baki_debet") @db.Decimal(18, 0)
-  confirmedTunggakan      Decimal?  @map("confirmed_tunggakan") @db.Decimal(18, 0)
-  confirmedKolektibilitas String? @map("confirmed_kolektibilitas") @db.VarChar(100)
+  confirmedBakiDebet      Decimal? @map("confirmed_baki_debet") @db.Decimal(18, 0)
+  confirmedTunggakan      Decimal? @map("confirmed_tunggakan") @db.Decimal(18, 0)
+  confirmedKolektibilitas String?  @map("confirmed_kolektibilitas") @db.VarChar(100)
 
   note           String?  @db.Text
   verifiedById   String?  @map("verified_by_id") @db.Uuid
@@ -682,8 +690,8 @@ model CreditApprovalLimit {
   branchId       String?  @map("branch_id") @db.Uuid
   roleId         String   @map("role_id") @db.Uuid
   levelName      String   @map("level_name") @db.VarChar(100)
-  minAmount      Decimal    @default(0) @map("min_amount") @db.Decimal(18, 0)
-  maxAmount      Decimal    @map("max_amount") @db.Decimal(18, 0)
+  minAmount      Decimal  @default(0) @map("min_amount") @db.Decimal(18, 0)
+  maxAmount      Decimal  @map("max_amount") @db.Decimal(18, 0)
   tierOrder      Int      @default(1) @map("tier_order")
   isActive       Boolean  @default(true) @map("is_active")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
@@ -702,18 +710,18 @@ model CreditApprovalLimit {
 /// tambahan boleh dicatat manual. `isRequired` disalin saat checklist dibuat
 /// agar riwayat tidak berubah ketika konfigurasi produk diubah kemudian.
 model CreditDocumentChecklist {
-  id                  String   @id @default(uuid()) @db.Uuid
-  organizationId      String   @map("organization_id") @db.Uuid
-  creditApplicationId String   @map("credit_application_id") @db.Uuid
+  id                  String       @id @default(uuid()) @db.Uuid
+  organizationId      String       @map("organization_id") @db.Uuid
+  creditApplicationId String       @map("credit_application_id") @db.Uuid
   documentType        DocumentType @map("document_type")
-  isRequired          Boolean  @default(false) @map("is_required")
-  isChecked           Boolean  @default(false) @map("is_checked")
-  note                String?  @db.Text
-  checkedById         String?  @map("checked_by_id") @db.Uuid
-  checkedByName       String?  @map("checked_by_name") @db.VarChar(200)
-  checkedAt           DateTime? @map("checked_at") @db.Timestamptz
-  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  isRequired          Boolean      @default(false) @map("is_required")
+  isChecked           Boolean      @default(false) @map("is_checked")
+  note                String?      @db.Text
+  checkedById         String?      @map("checked_by_id") @db.Uuid
+  checkedByName       String?      @map("checked_by_name") @db.VarChar(200)
+  checkedAt           DateTime?    @map("checked_at") @db.Timestamptz
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz
 
   organization      Organization      @relation(fields: [organizationId], references: [id])
   creditApplication CreditApplication @relation(fields: [creditApplicationId], references: [id], onDelete: Cascade)
@@ -727,19 +735,19 @@ model CreditDocumentChecklist {
 /// `participants` berisi array { name, role, present, vote }. Kuorum dihitung
 /// server dari jumlah peserta `present`; keputusan tidak sah bila < kuorum.
 model CreditCommitteeDecision {
-  id                  String   @id @default(uuid()) @db.Uuid
-  organizationId      String   @map("organization_id") @db.Uuid
-  creditApplicationId String   @map("credit_application_id") @db.Uuid
-  scheduledAt         DateTime @map("scheduled_at") @db.Timestamptz
-  decidedAt           DateTime @map("decided_at") @db.Timestamptz
-  quorumRequired      Int      @map("quorum_required")
+  id                  String                  @id @default(uuid()) @db.Uuid
+  organizationId      String                  @map("organization_id") @db.Uuid
+  creditApplicationId String                  @map("credit_application_id") @db.Uuid
+  scheduledAt         DateTime                @map("scheduled_at") @db.Timestamptz
+  decidedAt           DateTime                @map("decided_at") @db.Timestamptz
+  quorumRequired      Int                     @map("quorum_required")
   participants        Json
   decision            CreditApplicationStatus
-  notes               String?  @db.Text
-  conditions          String?  @db.Text
-  createdById         String?  @map("created_by_id") @db.Uuid
-  createdByName       String   @map("created_by_name") @db.VarChar(200)
-  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
+  notes               String?                 @db.Text
+  conditions          String?                 @db.Text
+  createdById         String?                 @map("created_by_id") @db.Uuid
+  createdByName       String                  @map("created_by_name") @db.VarChar(200)
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz
 
   organization      Organization      @relation(fields: [organizationId], references: [id])
   creditApplication CreditApplication @relation(fields: [creditApplicationId], references: [id], onDelete: Cascade)
@@ -751,18 +759,18 @@ model CreditCommitteeDecision {
 /// Tahap 9F (P1.1) — syarat terstruktur sebelum pencairan.
 /// Pencairan ditolak server bila masih ada syarat yang belum dipenuhi.
 model CreditDisbursementCondition {
-  id                  String   @id @default(uuid()) @db.Uuid
-  organizationId      String   @map("organization_id") @db.Uuid
-  creditApplicationId String   @map("credit_application_id") @db.Uuid
-  description         String   @db.Text
-  isSatisfied         Boolean  @default(false) @map("is_satisfied")
-  note                String?  @db.Text
-  satisfiedById       String?  @map("satisfied_by_id") @db.Uuid
-  satisfiedByName     String?  @map("satisfied_by_name") @db.VarChar(200)
+  id                  String    @id @default(uuid()) @db.Uuid
+  organizationId      String    @map("organization_id") @db.Uuid
+  creditApplicationId String    @map("credit_application_id") @db.Uuid
+  description         String    @db.Text
+  isSatisfied         Boolean   @default(false) @map("is_satisfied")
+  note                String?   @db.Text
+  satisfiedById       String?   @map("satisfied_by_id") @db.Uuid
+  satisfiedByName     String?   @map("satisfied_by_name") @db.VarChar(200)
   satisfiedAt         DateTime? @map("satisfied_at") @db.Timestamptz
-  sortOrder           Int      @default(0) @map("sort_order")
-  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  sortOrder           Int       @default(0) @map("sort_order")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
   organization      Organization      @relation(fields: [organizationId], references: [id])
   creditApplication CreditApplication @relation(fields: [creditApplicationId], references: [id], onDelete: Cascade)
@@ -771,13 +779,90 @@ model CreditDisbursementCondition {
   @@map("credit_disbursement_conditions")
 }
 
+enum CollateralStatus {
+  ACTIVE
+  RELEASED
+  EXPIRED
+}
+
+/// Tahap 10 (P1.2): agunan sebagai entitas tersendiri, terhubung ke nasabah
+/// dan (opsional) pengajuan kredit. Jenis/pengikatan disimpan sebagai teks
+/// karena daftar resmi belum ditetapkan dalam SOP.
+model CreditCollateral {
+  id                    String           @id @default(uuid()) @db.Uuid
+  organizationId        String           @map("organization_id") @db.Uuid
+  branchId              String?          @map("branch_id") @db.Uuid
+  customerId            String           @map("customer_id") @db.Uuid
+  creditApplicationId   String?          @map("credit_application_id") @db.Uuid
+  collateralCode        String           @map("collateral_code") @db.VarChar(50)
+  collateralType        String           @map("collateral_type") @db.VarChar(100)
+  ownershipProof        String?          @map("ownership_proof") @db.VarChar(200)
+  legalOwnerName        String           @map("legal_owner_name") @db.VarChar(200)
+  ownerRelationship     String?          @map("owner_relationship") @db.VarChar(100)
+  marketValue           Decimal?         @map("market_value") @db.Decimal(18, 0)
+  njopValue             Decimal?         @map("njop_value") @db.Decimal(18, 0)
+  appraisedValue        Decimal?         @map("appraised_value") @db.Decimal(18, 0)
+  appraiserName         String?          @map("appraiser_name") @db.VarChar(200)
+  appraisalMethod       String?          @map("appraisal_method") @db.VarChar(100)
+  appraisalDate         DateTime?        @map("appraisal_date") @db.Timestamptz
+  nextAppraisalDate     DateTime?        @map("next_appraisal_date") @db.Timestamptz
+  bindingType           String?          @map("binding_type") @db.VarChar(100)
+  bindingNumber         String?          @map("binding_number") @db.VarChar(100)
+  bindingDate           DateTime?        @map("binding_date") @db.Timestamptz
+  bindingExpiryDate     DateTime?        @map("binding_expiry_date") @db.Timestamptz
+  insuranceProvider     String?          @map("insurance_provider") @db.VarChar(200)
+  insurancePolicyNumber String?          @map("insurance_policy_number") @db.VarChar(100)
+  insuranceExpiryDate   DateTime?        @map("insurance_expiry_date") @db.Timestamptz
+  locationAddress       String?          @map("location_address") @db.Text
+  status                CollateralStatus @default(ACTIVE)
+  notes                 String?          @db.Text
+  createdById           String           @map("created_by_id") @db.Uuid
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization      Organization          @relation(fields: [organizationId], references: [id])
+  branch            Branch?               @relation(fields: [branchId], references: [id])
+  customer          Customer              @relation(fields: [customerId], references: [id])
+  creditApplication CreditApplication?    @relation(fields: [creditApplicationId], references: [id], onDelete: SetNull)
+  createdBy         User                  @relation("CollateralCreatedBy", fields: [createdById], references: [id])
+  appraisals        CollateralAppraisal[]
+
+  @@unique([organizationId, collateralCode])
+  @@index([organizationId, customerId])
+  @@index([organizationId, creditApplicationId])
+  @@index([organizationId, nextAppraisalDate])
+  @@index([organizationId, insuranceExpiryDate])
+  @@map("credit_collaterals")
+}
+
+/// Riwayat penilaian agunan; record terbaru tidak menimpa riwayat lama.
+model CollateralAppraisal {
+  id             String   @id @default(uuid()) @db.Uuid
+  collateralId   String   @map("collateral_id") @db.Uuid
+  marketValue    Decimal? @map("market_value") @db.Decimal(18, 0)
+  njopValue      Decimal? @map("njop_value") @db.Decimal(18, 0)
+  appraisedValue Decimal? @map("appraised_value") @db.Decimal(18, 0)
+  appraiserName  String?  @map("appraiser_name") @db.VarChar(200)
+  method         String?  @db.VarChar(100)
+  appraisalDate  DateTime @map("appraisal_date") @db.Timestamptz
+  notes          String?  @db.Text
+  createdById    String?  @map("created_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  collateral CreditCollateral @relation(fields: [collateralId], references: [id], onDelete: Cascade)
+  createdBy  User?            @relation("CollateralAppraisalCreatedBy", fields: [createdById], references: [id])
+
+  @@index([collateralId, appraisalDate])
+  @@map("collateral_appraisals")
+}
+
 model CreditApprovalRecord {
   id                  String                  @id @default(uuid()) @db.Uuid
   creditApplicationId String                  @map("credit_application_id") @db.Uuid
   approverId          String                  @map("approver_id") @db.Uuid
   approverRoleName    String                  @map("approver_role_name") @db.VarChar(100)
   status              CreditApplicationStatus
-  approvedAmount      Decimal?                  @map("approved_amount") @db.Decimal(18, 0)
+  approvedAmount      Decimal?                @map("approved_amount") @db.Decimal(18, 0)
   notes               String?                 @db.Text
   createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz
 
@@ -908,7 +993,7 @@ model InventoryItem {
   currentStock    Int      @default(0) @map("current_stock")
   minStock        Int      @default(5) @map("min_stock")
   storageLocation String?  @map("storage_location") @db.VarChar(200)
-  unitPrice       Decimal?   @map("unit_price") @db.Decimal(18, 0)
+  unitPrice       Decimal? @map("unit_price") @db.Decimal(18, 0)
   notes           String?  @db.Text
   isActive        Boolean  @default(true) @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
@@ -970,7 +1055,7 @@ model Asset {
   category        String         @db.VarChar(100) // e.g. IT Equipment, Office Furniture, Kendaraan Operasional, Elektronik
   serialNumber    String?        @map("serial_number") @db.VarChar(100)
   purchaseDate    DateTime?      @map("purchase_date") @db.Timestamptz
-  purchasePrice   Decimal?         @map("purchase_price") @db.Decimal(18, 0)
+  purchasePrice   Decimal?       @map("purchase_price") @db.Decimal(18, 0)
   vendor          String?        @db.VarChar(200)
   warrantyExpiry  DateTime?      @map("warranty_expiry") @db.Timestamptz
   location        String?        @db.VarChar(200)
@@ -1016,7 +1101,7 @@ model AssetMaintenance {
   assetId        String    @map("asset_id") @db.Uuid
   title          String    @db.VarChar(200)
   description    String?   @db.Text
-  cost           Decimal? @db.Decimal(18, 0)
+  cost           Decimal?  @db.Decimal(18, 0)
   vendor         String?   @db.VarChar(200)
   technician     String?   @db.VarChar(150)
   startDate      DateTime? @map("start_date") @db.Timestamptz
@@ -1080,7 +1165,7 @@ model PurchaseRequest {
   purpose              String                @db.Text
   requiredDate         DateTime?             @map("required_date") @db.Timestamptz
   status               PurchaseRequestStatus @default(DRAFT)
-  totalEstimatedAmount Decimal                 @default(0) @map("total_estimated_amount") @db.Decimal(18, 0)
+  totalEstimatedAmount Decimal               @default(0) @map("total_estimated_amount") @db.Decimal(18, 0)
   notes                String?               @db.Text
   createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz
@@ -1104,8 +1189,8 @@ model PurchaseRequestItem {
   category          String?  @db.VarChar(100)
   unit              String   @db.VarChar(50)
   quantity          Int
-  estimatedPrice    Decimal    @map("estimated_price") @db.Decimal(18, 0)
-  totalPrice        Decimal    @map("total_price") @db.Decimal(18, 0)
+  estimatedPrice    Decimal  @map("estimated_price") @db.Decimal(18, 0)
+  totalPrice        Decimal  @map("total_price") @db.Decimal(18, 0)
   itemType          String   @default("INVENTORY") @map("item_type") @db.VarChar(50) // INVENTORY, ASSET, SERVICE
   inventoryItemId   String?  @map("inventory_item_id") @db.Uuid
   notes             String?  @db.Text
@@ -1135,9 +1220,9 @@ model PurchaseOrder {
   expectedDeliveryDate DateTime?           @map("expected_delivery_date") @db.Timestamptz
   paymentTerms         String?             @map("payment_terms") @db.VarChar(100)
   status               PurchaseOrderStatus @default(DRAFT)
-  subtotal             Decimal               @default(0) @db.Decimal(18, 0)
-  taxAmount            Decimal               @default(0) @map("tax_amount") @db.Decimal(18, 0)
-  totalAmount          Decimal               @default(0) @map("total_amount") @db.Decimal(18, 0)
+  subtotal             Decimal             @default(0) @db.Decimal(18, 0)
+  taxAmount            Decimal             @default(0) @map("tax_amount") @db.Decimal(18, 0)
+  totalAmount          Decimal             @default(0) @map("total_amount") @db.Decimal(18, 0)
   notes                String?             @db.Text
   createdById          String              @map("created_by_id") @db.Uuid
   createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz
@@ -1162,8 +1247,8 @@ model PurchaseOrderItem {
   unit             String   @db.VarChar(50)
   quantityOrdered  Int      @map("quantity_ordered")
   quantityReceived Int      @default(0) @map("quantity_received")
-  unitPrice        Decimal    @map("unit_price") @db.Decimal(18, 0)
-  totalPrice       Decimal    @map("total_price") @db.Decimal(18, 0)
+  unitPrice        Decimal  @map("unit_price") @db.Decimal(18, 0)
+  totalPrice       Decimal  @map("total_price") @db.Decimal(18, 0)
   itemType         String   @default("INVENTORY") @map("item_type") @db.VarChar(50)
   inventoryItemId  String?  @map("inventory_item_id") @db.Uuid
   notes            String?  @db.Text
@@ -1247,8 +1332,8 @@ model WorkflowStep {
   stepOrder      Int      @map("step_order")
   name           String   @db.VarChar(200)
   approverRoleId String?  @map("approver_role_id") @db.Uuid
-  minAmount      Decimal    @default(0) @map("min_amount") @db.Decimal(18, 0)
-  maxAmount      Decimal?   @map("max_amount") @db.Decimal(18, 0)
+  minAmount      Decimal  @default(0) @map("min_amount") @db.Decimal(18, 0)
+  maxAmount      Decimal? @map("max_amount") @db.Decimal(18, 0)
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   workflow     Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)

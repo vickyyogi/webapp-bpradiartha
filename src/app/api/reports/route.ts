@@ -1,21 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireAuthAndPermission } from "@/lib/permissions";
+import { requireAnyPermission } from "@/lib/permissions";
 import { buildScopeFilter, toScopeUser } from "@/lib/access-scope";
 import { extractClientInfo, logAudit } from "@/lib/audit";
+import { maskPhone } from "@/lib/privacy";
+import { EXPORT_BATCH_SIZE, createCsvStream } from "@/lib/report-export";
+
+const DOMAIN_PERMISSIONS: Record<string, { view: string; export: string }> = {
+  CREDIT: { view: "report.credit.view", export: "report.credit.export" },
+  FIELD: { view: "report.field.view", export: "report.field.export" },
+  PURCHASING: { view: "report.purchasing.view", export: "report.purchasing.export" },
+  INVENTORY: { view: "report.inventory.view", export: "report.inventory.export" },
+  ASSET: { view: "report.inventory.view", export: "report.inventory.export" },
+  ALL: { view: "report.management.view", export: "report.management.export" },
+};
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseDate(value: string | null, endOfDay = false): Date | null {
+  if (!value || !DATE_RE.test(value)) return null;
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  if (endOfDay) date.setHours(23, 59, 59, 999);
+  return date;
+}
 
 export async function GET (req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const domain = searchParams.get("domain") || "ALL"; // ALL, CREDIT, FIELD, PURCHASING, INVENTORY, ASSET
-    const format = searchParams.get("format"); // "csv" or json
-    const startDate = searchParams.get("startDate");
-    const endDate = searchParams.get("endDate");
+    const domain = (searchParams.get("domain") || "ALL").toUpperCase();
+    const format = searchParams.get("format");
+    const startDate = parseDate(searchParams.get("startDate"));
+    const endDate = parseDate(searchParams.get("endDate"), true);
+    const branchId = searchParams.get("branchId");
+    const product = searchParams.get("product")?.trim();
+    const officerId = searchParams.get("officerId");
+    const analystId = searchParams.get("analystId");
 
-    // Ekspor CSV memuat data sensitif lintas entitas → butuh izin ekspor tersendiri.
-    const requiredPermission = format === "csv" ? "report.management.export" : "report.management.view";
-    const authCheck = await requireAuthAndPermission(requiredPermission);
+    const permissions = DOMAIN_PERMISSIONS[domain];
+    if (!permissions) {
+      return NextResponse.json({ error: "Domain laporan tidak dikenal." }, { status: 400 });
+    }
+
+    // Tahap 8 (P1.5): izin ekspor mengikuti domain laporan, bukan hanya izin
+    // manajemen. Ekspor tetap butuh izin ekspor tersendiri (least privilege).
+    const authCheck = await requireAnyPermission(
+      format === "csv"
+        ? [permissions.export, "report.management.export"]
+        : [permissions.view, "report.management.view"]
+    );
     if (!authCheck.authorized) {
       return authCheck.response;
     }
@@ -23,15 +57,12 @@ export async function GET (req: NextRequest) {
     const scopeUser = toScopeUser(currentUser);
 
     const dateFilter: Prisma.DateTimeFilter = {};
-    if (startDate) dateFilter.gte = new Date(startDate);
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      dateFilter.lte = end;
-    }
+    if (startDate) dateFilter.gte = startDate;
+    if (endDate) dateFilter.lte = endDate;
     const hasDate = Boolean(startDate || endDate);
 
-    // Cakupan organisasi/cabang/penugasan untuk setiap entitas.
+    // Cakupan organisasi/cabang/penugasan tetap berlaku meski filter cabang
+    // diminta klien; filter diminta hanya mempersempit cakupan, bukan menggantinya.
     const creditScope = buildScopeFilter(scopeUser, {
       assignmentFields: ["assignedMarketingOfficerId", "assignedAnalystId", "assignedSurveyOfficerId", "decisionMakerId"],
     }) as Prisma.CreditApplicationWhereInput;
@@ -41,103 +72,106 @@ export async function GET (req: NextRequest) {
     const invScope = buildScopeFilter(scopeUser, { assignmentFields: [] }) as Prisma.InventoryItemWhereInput;
     const assetScope = buildScopeFilter(scopeUser, { assignmentFields: ["currentHolderId"] }) as Prisma.AssetWhereInput;
 
-    // 1. Credit Data
-    const creditApps = await db.creditApplication.findMany({
-      where: { ...creditScope, ...(hasDate ? { createdAt: dateFilter } : {}) },
-      include: {
-        customer: { select: { legalName: true, phone: true } },
-        marketingOfficer: { select: { fullName: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const creditWhere: Prisma.CreditApplicationWhereInput = {
+      ...creditScope,
+      ...(hasDate ? { createdAt: dateFilter } : {}),
+      ...(branchId ? { branchId } : {}),
+      ...(product ? { product: { contains: product, mode: "insensitive" } } : {}),
+      ...(officerId ? { assignedMarketingOfficerId: officerId } : {}),
+      ...(analystId ? { assignedAnalystId: analystId } : {}),
+    };
+    const fieldWhere: Prisma.FieldTaskWhereInput = {
+      ...fieldScope,
+      ...(hasDate ? { createdAt: dateFilter } : {}),
+      ...(branchId ? { branchId } : {}),
+      ...(officerId ? { assignedOfficerId: officerId } : {}),
+    };
+    const prWhere: Prisma.PurchaseRequestWhereInput = {
+      ...prScope,
+      ...(hasDate ? { createdAt: dateFilter } : {}),
+      ...(branchId ? { branchId } : {}),
+    };
+    const poWhere: Prisma.PurchaseOrderWhereInput = {
+      ...poScope,
+      ...(hasDate ? { createdAt: dateFilter } : {}),
+      ...(branchId ? { branchId } : {}),
+    };
+    const invWhere: Prisma.InventoryItemWhereInput = {
+      ...invScope,
+      ...(branchId ? { branchId } : {}),
+      isActive: true,
+    };
+    const assetWhere: Prisma.AssetWhereInput = {
+      ...assetScope,
+      ...(branchId ? { branchId } : {}),
+    };
 
-    // 2. Field Tasks
-    const fieldTasks = await db.fieldTask.findMany({
-      where: { ...fieldScope, ...(hasDate ? { createdAt: dateFilter } : {}) },
-      include: { assignedOfficer: { select: { fullName: true } } },
-      orderBy: { createdAt: "desc" },
-    });
-
-    // 3. Purchasing (PR & PO)
-    const purchaseRequests = await db.purchaseRequest.findMany({
-      where: { ...prScope, ...(hasDate ? { createdAt: dateFilter } : {}) },
-      include: {
-        requester: { select: { fullName: true } },
-        department: { select: { name: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    const purchaseOrders = await db.purchaseOrder.findMany({
-      where: { ...poScope, ...(hasDate ? { createdAt: dateFilter } : {}) },
-      include: {
-        vendor: { select: { name: true, category: true } },
-        createdBy: { select: { fullName: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    // 4. Inventory & Assets
-    const inventoryItems = await db.inventoryItem.findMany({
-      where: { ...invScope, isActive: true },
-      orderBy: { name: "asc" },
-    });
-
-    const assets = await db.asset.findMany({
-      where: { ...assetScope },
-      include: { currentHolder: { select: { fullName: true } } },
-      orderBy: { createdAt: "desc" },
-    });
-
-    // If CSV export requested
+    // --- Ekspor CSV: kueri per batch, kirim sebagai stream ---
     if (format === "csv") {
-      let csvContent = "";
       const filename = `laporan-bpr-${domain.toLowerCase()}-${new Date().toISOString().split("T")[0]}.csv`;
+      let header: string[] = [];
+      let rows: AsyncIterable<unknown[]> = (async function* () {})();
+      let rowCount = 0;
 
       if (domain === "CREDIT") {
-        csvContent = "No. Aplikasi,Pemohon,Produk,Nominal Diajukan,Nominal Disetujui,Nominal Realisasi,Status,Tanggal Pengajuan\n";
-        creditApps.forEach((c) => {
-          csvContent += `"${c.applicationNumber}","${c.customer?.legalName || "-"}","${c.product || "-"}","${c.requestedAmount || 0}","${c.approvedAmount || 0}","${c.realizationAmount || 0}","${c.status}","${new Date(c.createdAt).toLocaleDateString("id-ID")}"\n`;
-        });
+        rowCount = await db.creditApplication.count({ where: creditWhere });
+        header = [
+          "No. Aplikasi", "Cabang", "Pemohon", "Kontak", "Produk",
+          "Marketing Officer", "Analis", "Nominal Diajukan", "Nominal Disetujui",
+          "Nominal Realisasi", "Status", "Tanggal Pengajuan",
+        ];
+        rows = paginateCredit(creditWhere);
+      } else if (domain === "FIELD") {
+        rowCount = await db.fieldTask.count({ where: fieldWhere });
+        header = ["Judul Tugas", "Jenis", "Petugas", "Cabang", "Status", "Lokasi", "Tanggal Tugas"];
+        rows = paginateField(fieldWhere);
       } else if (domain === "PURCHASING") {
-        csvContent = "No. PO,Vendor,Tanggal PO,Syarat Bayar,Subtotal,PPN 11%,Total Nilai,Status\n";
-        purchaseOrders.forEach((p) => {
-          csvContent += `"${p.poNumber}","${p.vendor?.name || "-"}","${new Date(p.poDate).toLocaleDateString("id-ID")}","${p.paymentTerms || "-"}","${p.subtotal}","${p.taxAmount}","${p.totalAmount}","${p.status}"\n`;
-        });
+        rowCount = await db.purchaseOrder.count({ where: poWhere });
+        header = ["No. PO", "Vendor", "Cabang", "Tanggal PO", "Syarat Bayar", "Subtotal", "PPN", "Total Nilai", "Status"];
+        rows = paginatePurchaseOrders(poWhere);
       } else if (domain === "INVENTORY") {
-        csvContent = "Kode Barang,Nama Barang,Kategori,Satuan,Stok Saat Ini,Batas Minimum,Harga Satuan,Nilai Total Stok\n";
-        inventoryItems.forEach((i) => {
-          const totalVal = Number(i.unitPrice || 0) * i.currentStock;
-          csvContent += `"${i.itemCode}","${i.name}","${i.category}","${i.unit}","${i.currentStock}","${i.minStock}","${i.unitPrice || 0}","${totalVal}"\n`;
-        });
+        rowCount = await db.inventoryItem.count({ where: invWhere });
+        header = ["Kode Barang", "Nama Barang", "Kategori", "Satuan", "Stok Saat Ini", "Batas Minimum", "Harga Satuan", "Nilai Total Stok"];
+        rows = paginateInventory(invWhere);
       } else if (domain === "ASSET") {
-        csvContent = "No. Aset,Nama Aset,Kategori,No Seri,Pemegang,Lokasi,Kondisi,Status,Harga Perolehan\n";
-        assets.forEach((a) => {
-          csvContent += `"${a.assetNumber}","${a.name}","${a.category}","${a.serialNumber || "-"}","${a.currentHolder?.fullName || "-"}","${a.location || "-"}","${a.condition}","${a.status}","${a.purchasePrice || 0}"\n`;
-        });
+        rowCount = await db.asset.count({ where: assetWhere });
+        header = ["No. Aset", "Nama Aset", "Kategori", "No Seri", "Pemegang", "Cabang", "Lokasi", "Kondisi", "Status", "Harga Perolehan"];
+        rows = paginateAssets(assetWhere);
       } else {
-        // Default combined summary
-        csvContent = "Kategori Laporan,Jumlah Data,Nilai Akumulasi (Rp)\n";
-        csvContent += `"Aplikasi Kredit Total","${creditApps.length}","${creditApps.reduce((s, c) => s + Number(c.requestedAmount || 0), 0)}"\n`;
-        csvContent += `"Kredit Direalisasikan","${creditApps.filter((c) => c.status === "APPROVED" && c.realizationAmount).length}","${creditApps.reduce((s, c) => s + Number(c.realizationAmount || 0), 0)}"\n`;
-        csvContent += `"Purchase Order Terbit","${purchaseOrders.length}","${purchaseOrders.reduce((s, p) => s + Number(p.totalAmount || 0), 0)}"\n`;
-        csvContent += `"Total Nilai Aset Tetap","${assets.length}","${assets.reduce((s, a) => s + Number(a.purchasePrice || 0), 0)}"\n`;
-        csvContent += `"Total Nilai Stok ATK","${inventoryItems.length}","${inventoryItems.reduce((s, i) => s + Number(i.unitPrice || 0) * i.currentStock, 0)}"\n`;
+        // Ringkasan gabungan: hitung agregat tanpa memuat seluruh baris.
+        const [creditCount, creditSum, realized, fieldCount, completedField, prCount, poCount, poSum, invCount, invValue, assetCount, assetSum] =
+          await Promise.all([
+            db.creditApplication.count({ where: creditWhere }),
+            db.creditApplication.aggregate({ where: creditWhere, _sum: { requestedAmount: true, realizationAmount: true } }),
+            db.creditApplication.count({ where: { ...creditWhere, status: "APPROVED" } }),
+            db.fieldTask.count({ where: fieldWhere }),
+            db.fieldTask.count({ where: { ...fieldWhere, status: "COMPLETED" } }),
+            db.purchaseRequest.count({ where: prWhere }),
+            db.purchaseOrder.count({ where: poWhere }),
+            db.purchaseOrder.aggregate({ where: poWhere, _sum: { totalAmount: true } }),
+            db.inventoryItem.count({ where: invWhere }),
+            sumInventoryValue(invWhere),
+            db.asset.count({ where: assetWhere }),
+            db.asset.aggregate({ where: assetWhere, _sum: { purchasePrice: true } }),
+          ]);
+        const summary = [
+          ["Aplikasi Kredit Total", creditCount, Number(creditSum._sum.requestedAmount || 0)],
+          ["Kredit Disetujui", realized, Number(creditSum._sum.realizationAmount || 0)],
+          ["Tugas Lapangan", fieldCount, 0],
+          ["Tugas Lapangan Selesai", completedField, 0],
+          ["Purchase Request", prCount, 0],
+          ["Purchase Order", poCount, Number(poSum._sum.totalAmount || 0)],
+          ["Item Inventaris", invCount, invValue],
+          ["Aset Tetap", assetCount, Number(assetSum._sum.purchasePrice || 0)],
+        ];
+        rowCount = summary.length;
+        header = ["Kategori Laporan", "Jumlah Data", "Nilai Akumulasi (Rp)"];
+        rows = (async function* () {
+          yield* summary;
+        })();
       }
 
-      // Tahap 7 (P1.6): ekspor data wajib berjejak audit. Metadata saja;
-      // isi CSV dan PII tidak pernah masuk log.
-      const rowCount =
-        domain === "CREDIT"
-          ? creditApps.length
-          : domain === "PURCHASING"
-          ? purchaseOrders.length
-          : domain === "INVENTORY"
-          ? inventoryItems.length
-          : domain === "ASSET"
-          ? assets.length
-          : creditApps.length + purchaseOrders.length + inventoryItems.length + assets.length;
-
+      // Tahap 7 (P1.6): ekspor berjejak audit. Metadata saja; isi CSV/PII tidak masuk log.
       await logAudit({
         organizationId: currentUser.organizationId,
         userId: currentUser.id,
@@ -145,20 +179,53 @@ export async function GET (req: NextRequest) {
         entityType: "REPORT",
         entityId: filename,
         ...extractClientInfo(req),
-        newValues: { format: "csv", domain, rowCount },
+        newValues: {
+          format: "csv",
+          domain,
+          rowCount,
+          filters: { startDate: searchParams.get("startDate"), endDate: searchParams.get("endDate"), branchId, product, officerId, analystId },
+          pii: "masked",
+        },
         notes: `Ekspor CSV laporan domain ${domain} (${rowCount} baris).`,
       });
 
-      return new NextResponse(csvContent, {
+      return new NextResponse(createCsvStream(header, rows), {
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
           "Content-Disposition": `attachment; filename="${filename}"`,
           "Cache-Control": "private, no-store, max-age=0",
+          "X-Content-Type-Options": "nosniff",
         },
       });
     }
 
-    // JSON response aggregations
+    // --- Tampilan JSON ---
+    const creditApps = await db.creditApplication.findMany({
+      where: creditWhere,
+      include: {
+        customer: { select: { legalName: true, phone: true } },
+        marketingOfficer: { select: { fullName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    const fieldTasks = await db.fieldTask.findMany({
+      where: fieldWhere,
+      include: { assignedOfficer: { select: { fullName: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    const purchaseRequests = await db.purchaseRequest.findMany({ where: prWhere, orderBy: { createdAt: "desc" } });
+    const purchaseOrders = await db.purchaseOrder.findMany({
+      where: poWhere,
+      include: { vendor: { select: { name: true, category: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    const inventoryItems = await db.inventoryItem.findMany({ where: invWhere, orderBy: { name: "asc" } });
+    const assets = await db.asset.findMany({
+      where: assetWhere,
+      include: { currentHolder: { select: { fullName: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+
     const creditPipelineSummary = {
       totalApplications: creditApps.length,
       totalRequestedAmount: creditApps.reduce((s, c) => s + Number(c.requestedAmount || 0), 0),
@@ -207,7 +274,11 @@ export async function GET (req: NextRequest) {
       purchasingSummary,
       inventoryAssetSummary,
       data: {
-        creditApps: creditApps.slice(0, 10),
+        // Tahap 8: kontak selalu dimasking pada tampilan laporan.
+        creditApps: creditApps.slice(0, 10).map((c) => ({
+          ...c,
+          customer: c.customer ? { legalName: c.customer.legalName, phone: maskPhone(c.customer.phone) } : null,
+        })),
         purchaseOrders: purchaseOrders.slice(0, 10),
         inventoryItems: inventoryItems.slice(0, 10),
         assets: assets.slice(0, 10),
@@ -216,5 +287,136 @@ export async function GET (req: NextRequest) {
   } catch (error) {
     console.error("GET /api/reports error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+async function* paginateCredit (where: Prisma.CreditApplicationWhereInput): AsyncIterable<unknown[]> {
+  let cursor: string | undefined;
+  for (;;) {
+    const batch = await db.creditApplication.findMany({
+      where,
+      take: EXPORT_BATCH_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: { id: "asc" },
+      include: {
+        customer: { select: { legalName: true, phone: true } },
+        branch: { select: { name: true } },
+        marketingOfficer: { select: { fullName: true } },
+        analyst: { select: { fullName: true } },
+      },
+    });
+    if (batch.length === 0) return;
+    for (const c of batch) {
+      yield [
+        c.applicationNumber, c.branch?.name || "-", c.customer?.legalName || "-",
+        maskPhone(c.customer?.phone), c.product || "-",
+        c.marketingOfficer?.fullName || "-", c.analyst?.fullName || "-",
+        c.requestedAmount ?? 0, c.approvedAmount ?? 0, c.realizationAmount ?? 0,
+        c.status, new Date(c.createdAt).toLocaleDateString("id-ID"),
+      ];
+    }
+    cursor = batch[batch.length - 1].id;
+  }
+}
+
+async function* paginateField (where: Prisma.FieldTaskWhereInput): AsyncIterable<unknown[]> {
+  let cursor: string | undefined;
+  for (;;) {
+    const batch = await db.fieldTask.findMany({
+      where,
+      take: EXPORT_BATCH_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: { id: "asc" },
+      include: { assignedOfficer: { select: { fullName: true } }, branch: { select: { name: true } } },
+    });
+    if (batch.length === 0) return;
+    for (const t of batch) {
+      yield [
+        t.title, t.taskType, t.assignedOfficer?.fullName || "-", t.branch?.name || "-",
+        t.status, t.customerAddress || "-", new Date(t.createdAt).toLocaleDateString("id-ID"),
+      ];
+    }
+    cursor = batch[batch.length - 1].id;
+  }
+}
+
+async function* paginatePurchaseOrders (where: Prisma.PurchaseOrderWhereInput): AsyncIterable<unknown[]> {
+  let cursor: string | undefined;
+  for (;;) {
+    const batch = await db.purchaseOrder.findMany({
+      where,
+      take: EXPORT_BATCH_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: { id: "asc" },
+      include: { vendor: { select: { name: true } }, branch: { select: { name: true } } },
+    });
+    if (batch.length === 0) return;
+    for (const p of batch) {
+      yield [
+        p.poNumber, p.vendor?.name || "-", p.branch?.name || "-",
+        new Date(p.poDate).toLocaleDateString("id-ID"), p.paymentTerms || "-",
+        p.subtotal ?? 0, p.taxAmount ?? 0, p.totalAmount ?? 0, p.status,
+      ];
+    }
+    cursor = batch[batch.length - 1].id;
+  }
+}
+
+async function* paginateInventory (where: Prisma.InventoryItemWhereInput): AsyncIterable<unknown[]> {
+  let cursor: string | undefined;
+  for (;;) {
+    const batch = await db.inventoryItem.findMany({
+      where,
+      take: EXPORT_BATCH_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: { id: "asc" },
+    });
+    if (batch.length === 0) return;
+    for (const i of batch) {
+      yield [
+        i.itemCode, i.name, i.category, i.unit, i.currentStock, i.minStock,
+        i.unitPrice ?? 0, Number(i.unitPrice || 0) * i.currentStock,
+      ];
+    }
+    cursor = batch[batch.length - 1].id;
+  }
+}
+
+async function* paginateAssets (where: Prisma.AssetWhereInput): AsyncIterable<unknown[]> {
+  let cursor: string | undefined;
+  for (;;) {
+    const batch = await db.asset.findMany({
+      where,
+      take: EXPORT_BATCH_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: { id: "asc" },
+      include: { currentHolder: { select: { fullName: true } }, branch: { select: { name: true } } },
+    });
+    if (batch.length === 0) return;
+    for (const a of batch) {
+      yield [
+        a.assetNumber, a.name, a.category, a.serialNumber || "-",
+        a.currentHolder?.fullName || "-", a.branch?.name || "-", a.location || "-",
+        a.condition, a.status, a.purchasePrice ?? 0,
+      ];
+    }
+    cursor = batch[batch.length - 1].id;
+  }
+}
+
+async function sumInventoryValue (where: Prisma.InventoryItemWhereInput): Promise<number> {
+  let cursor: string | undefined;
+  let total = 0;
+  for (;;) {
+    const batch = await db.inventoryItem.findMany({
+      where,
+      take: EXPORT_BATCH_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: { id: "asc" },
+      select: { id: true, unitPrice: true, currentStock: true },
+    });
+    if (batch.length === 0) return total;
+    total += batch.reduce((s, i) => s + Number(i.unitPrice || 0) * i.currentStock, 0);
+    cursor = batch[batch.length - 1].id;
   }
 }

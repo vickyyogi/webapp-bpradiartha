@@ -1,12 +1,11 @@
 {
     "schema_version": 2,
-    "commit": "70b5c176bc4ea9cf274f5c029ef4d07e9a0c4b03",
-    "indexed_at": "2026-10-20T04:50:04Z",
-    "project": "C-Users-SER5-MAX-Documents-VICKY-javascript-webapp-bpradiartha",
-    "nodes": 11358,
-    "edges": 17659,
-    "original_size": 242286592,
-    "compressed_size": 3967088,
-    "compression_level": 3,
-    "reconcile_basis": "git-clean-head"
+    "commit": "d86b78cccf08cc359baf0a21b65790ef923f1968",
+    "indexed_at": "2026-10-21T14:10:43Z",
+    "project": "home-yogi-Documents-projects-webapp-bpradiartha",
+    "nodes": 11534,
+    "edges": 18218,
+    "original_size": 223477760,
+    "compressed_size": 4018722,
+    "compression_level": 3
 }

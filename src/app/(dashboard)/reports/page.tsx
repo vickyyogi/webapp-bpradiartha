@@ -18,6 +18,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CreditAppRow {
   id: string;
@@ -82,6 +89,18 @@ export default function ReportsDashboardPage() {
   // Filters
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [branchId, setBranchId] = useState("ALL");
+  const [product, setProduct] = useState("");
+  const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
+
+  useEffect(() => {
+    fetch("/api/admin/options")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data?.branches)) setBranches(data.branches);
+      })
+      .catch(() => {});
+  }, []);
 
   const [refreshKey, setRefreshKey] = useState(0);
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
@@ -94,6 +113,8 @@ export default function ReportsDashboardPage() {
         const params = new URLSearchParams();
         if (startDate) params.set("startDate", startDate);
         if (endDate) params.set("endDate", endDate);
+        if (branchId !== "ALL") params.set("branchId", branchId);
+        if (product.trim()) params.set("product", product.trim());
 
         const res = await fetch(`/api/reports?${params.toString()}`);
         if (res.ok) {
@@ -111,7 +132,7 @@ export default function ReportsDashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [startDate, endDate, refreshKey]);
+  }, [startDate, endDate, branchId, product, refreshKey]);
 
   const handleExportCSV = (domain: string) => {
     const params = new URLSearchParams();
@@ -119,6 +140,8 @@ export default function ReportsDashboardPage() {
     params.set("format", "csv");
     if (startDate) params.set("startDate", startDate);
     if (endDate) params.set("endDate", endDate);
+    if (branchId !== "ALL") params.set("branchId", branchId);
+    if (product.trim()) params.set("product", product.trim());
 
     window.open(`/api/reports?${params.toString()}`, "_blank");
   };
@@ -180,6 +203,23 @@ export default function ReportsDashboardPage() {
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
+                className="w-40 h-9 text-xs"
+              />
+              <Select value={branchId} onValueChange={(value) => setBranchId(value ?? "ALL")}>
+                <SelectTrigger className="w-40 h-9 text-xs">
+                  <SelectValue placeholder="Semua Cabang" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Semua Cabang</SelectItem>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder="Filter produk..."
+                value={product}
+                onChange={(e) => setProduct(e.target.value)}
                 className="w-40 h-9 text-xs"
               />
             </div>

@@ -14,6 +14,8 @@
     "verify:decimal": "ts-node --project scripts/tsconfig.json scripts/verify-decimal.ts",
     "verify:credit-product": "ts-node --project scripts/tsconfig.json scripts/verify-credit-product.ts",
     "verify:credit-governance": "ts-node --project scripts/tsconfig.json scripts/verify-credit-governance.ts",
+    "verify:reports": "ts-node --project scripts/tsconfig.json scripts/verify-reports.ts",
+    "verify:collateral": "ts-node --project scripts/tsconfig.json scripts/verify-collateral.ts",
     "audit:purge": "ts-node --project scripts/tsconfig.json scripts/purge-audit-logs.ts",
     "verify:audit": "ts-node --project scripts/tsconfig.json scripts/verify-audit.ts",
     "verify:auth": "ts-node --project scripts/tsconfig.json scripts/verify-auth.ts",
